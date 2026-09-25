@@ -13,7 +13,7 @@ RENDERERS.accueil = () => {
   const retard = dus.filter(impotEnRetard);
   const taxes = DB.commerces.reduce((s, c) => s + taxeDue(c), 0);
   const paie = masseSalariale();
-  // Ce qu'il restera après les engagements connu
+  // Ce qu'il restera après les engagement connu
   const projete = solde - totalDu - paie + taxes;
   const enPoste = DB.membres.filter(m => m.statut !== 'Congédié').length;
   const ouverts = DB.commerces.filter(c => c.statut === 'Ouvert').length;
