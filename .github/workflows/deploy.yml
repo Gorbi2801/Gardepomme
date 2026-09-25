@@ -24,7 +24,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Générer scripts/config.js depuis les Secrets
+      - name: Préparer le site
+        run: |
+          rm -rf site && mkdir -p site/scripts
+          cp -r index.html styles assets site/
+          cp -r scripts/. site/scripts/
+
+      - name: Générer site/scripts/config.js depuis les Secrets
         env:
           SUPABASE_URL: ${{ secrets.SUPABASEURL }}
           SUPABASE_KEY: ${{ secrets.SUPABASEKEY }}
@@ -39,16 +45,11 @@ jobs:
             supabaseKey: process.env.SUPABASE_KEY,
             authEmailDomain: process.env.AUTH_EMAIL_DOMAIN || 'gardepomme.invalid',
           };
-          fs.writeFileSync('scripts/config.js',
+          fs.writeFileSync('site/scripts/config.js',
             `window.GardepommeConfig = Object.freeze(${JSON.stringify(config, null, 2)});\n`);
-          console.log('scripts/config.js généré.');
+          console.log('site/scripts/config.js généré.');
           NODE
-
-      - name: Préparer le site
-        run: |
-          rm -rf site && mkdir site
-          cp -r index.html styles scripts assets site/
-          test -f site/scripts/config.js
+          test -f site/scripts/config.js && echo "OK : config.js présent"
 
       - name: Envoyer l'artefact Pages
         uses: actions/upload-pages-artifact@v5
