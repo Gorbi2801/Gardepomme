@@ -3,9 +3,9 @@
 //  La clé utilisée est la clé publique (publishable/anon). La sécurité
 //  repose sur les RLS de 01_schema.sql. Ne jamais y mettre la service_role.
 // ══════════════════════════════════════════════════════════════════════
-const CFG = window.GardepommeConfig;
-const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey);
-
+// Déclarer les sections avant toute initialisation externe : même si la
+// configuration Supabase est absente, bootstrap.js peut afficher une erreur
+// explicite sans provoquer un second plantage sur SECTIONS.
 const SECTIONS = {
   accueil:   { label: 'Tableau de bord', public: true },
   effectifs: { label: 'Effectifs & salaires', public: true, editable: true },
@@ -16,6 +16,11 @@ const SECTIONS = {
   journal:   { label: 'Historique', public: false },
   comptes:   { label: 'Comptes', public: false, superadmin: true },
 };
+
+const CFG = window.GardepommeConfig;
+const sb = window.supabase && CFG?.supabaseUrl && CFG?.supabaseKey
+  ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey)
+  : null;
 const EDITABLE_SECTIONS = Object.keys(SECTIONS).filter(k => SECTIONS[k].editable);
 
 // Table → section (pour les droits et l'historique)
