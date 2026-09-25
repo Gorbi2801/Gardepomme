@@ -1,0 +1,60 @@
+name: Déployer le Livret de Gardepomme
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Générer scripts/config.js depuis les Secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASEURL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASEKEY }}
+          AUTH_EMAIL_DOMAIN: ${{ secrets.AUTHEMAILDOMAIN }}
+        run: |
+          test -n "$SUPABASE_URL" || { echo "Secret SUPABASEURL manquant"; exit 1; }
+          test -n "$SUPABASE_KEY" || { echo "Secret SUPABASEKEY manquant"; exit 1; }
+          node <<'NODE'
+          const fs = require('fs');
+          const config = {
+            supabaseUrl: process.env.SUPABASE_URL,
+            supabaseKey: process.env.SUPABASE_KEY,
+            authEmailDomain: process.env.AUTH_EMAIL_DOMAIN || 'gardepomme.invalid',
+          };
+          fs.writeFileSync('scripts/config.js',
+            `window.GardepommeConfig = Object.freeze(${JSON.stringify(config, null, 2)});\n`);
+          console.log('scripts/config.js généré.');
+          NODE
+
+      - name: Préparer le site
+        run: |
+          rm -rf site && mkdir site
+          cp -r index.html styles scripts assets site/
+          test -f site/scripts/config.js
+
+      - name: Envoyer l'artefact Pages
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - name: Déployer sur GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

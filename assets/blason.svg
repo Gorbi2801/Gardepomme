@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" role="img" aria-label="Blason de Gardepomme">
+  <path d="M10 8 H110 V70 C110 104 86 124 60 134 C34 124 10 104 10 70 Z" fill="#2F3A40" stroke="#A87E32" stroke-width="4"/>
+  <path d="M10 60 L34 34 L48 48 L66 24 L86 46 L96 38 L110 52 V70 C110 72 110 74 110 76 L10 76 Z" fill="#DDE2DA"/>
+  <path d="M34 34 L28 41 L40 42 Z M66 24 L58 34 L74 35 Z" fill="#FFFFFF"/>
+  <path d="M10 76 H110 C109 104 86 124 60 134 C34 124 11 104 10 76 Z" fill="#3E5B3B"/>
+  <path d="M60 62 C52 55 36 57 35 76 C34 94 46 110 60 104 C74 110 86 94 85 76 C84 57 68 55 60 62 Z" fill="#9A2A22" stroke="#22271F" stroke-width="2"/>
+  <path d="M60 62 C60 55 62 50 66 46" fill="none" stroke="#22271F" stroke-width="3" stroke-linecap="round"/>
+  <path d="M65 50 C72 42 82 44 84 48 C78 54 70 54 65 50 Z" fill="#6E8F55" stroke="#22271F" stroke-width="1.5"/>
+  <path d="M46 72 C44 78 45 84 48 88" fill="none" stroke="#E7B7A8" stroke-width="3" stroke-linecap="round" opacity=".7"/>
+</svg>

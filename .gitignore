@@ -1,0 +1,5 @@
+.DS_Store
+desktop.ini
+scripts/config.js
+node_modules/
+supabase/.temp/

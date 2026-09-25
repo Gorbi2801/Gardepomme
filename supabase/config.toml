@@ -1,0 +1,2 @@
+[functions.gp-admin-users]
+verify_jwt = true
