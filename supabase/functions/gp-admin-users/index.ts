@@ -1,9 +1,3 @@
-// ══════════════════════════════════════════════════════════════════════
-//  gp-admin-users — création / suppression / reset de comptes
-//  Seul un superadmin (gp_profiles.is_superadmin) peut l'appeler.
-//  Déploiement : supabase functions deploy gp-admin-users
-//  Secret requis : supabase secrets set AUTH_EMAIL_DOMAIN=gardepomme.invalid
-// ══════════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -13,7 +7,6 @@ const corsHeaders = {
 };
 
 const SECTION_KEYS = ['effectifs', 'commerces', 'codex', 'finances', 'impots'];
-
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const AUTH_EMAIL_DOMAIN = Deno.env.get('AUTH_EMAIL_DOMAIN') || 'gardepomme.invalid';
@@ -34,7 +27,8 @@ function normalizeUsername(value: unknown) {
 }
 
 function assertUsername(username: string) {
-  if (!/^[a-z0-9_-]{3,32}$/.test(username)) throw new Error('Identifiant invalide (3 à 32 caractères : lettres, chiffres, - ou _).');
+  if (!/^[a-z0-9_-]{3,32}$/.test(username))
+    throw new Error('Identifiant invalide (3 à 32 caractères : lettres minuscules, chiffres, - ou _).');
 }
 
 function assertPassword(password: string) {
@@ -46,18 +40,16 @@ function normalizeSections(value: unknown) {
   return [...new Set(value.map((v) => String(v || '').trim()).filter((v) => SECTION_KEYS.includes(v)))];
 }
 
-function assertUserId(value: unknown) {
-  const id = String(value || '').trim();
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Identifiant utilisateur invalide.');
-  return id;
-}
-
 async function requireSuperadmin(req: Request) {
   const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
   if (!token) throw new Error('Session manquante.');
   const { data, error } = await admin.auth.getUser(token);
   if (error || !data.user) throw new Error('Session invalide.');
-  const { data: profile } = await admin.from('gp_profiles').select('is_superadmin').eq('user_id', data.user.id).single();
+  const { data: profile } = await admin
+    .from('gp_profiles')
+    .select('is_superadmin')
+    .eq('user_id', data.user.id)
+    .single();
   if (profile?.is_superadmin !== true) throw new Error('Accès superadmin requis.');
   return data.user;
 }
@@ -94,15 +86,16 @@ async function createAccount(p: Record<string, unknown>) {
 }
 
 async function deleteAccount(p: Record<string, unknown>, callerId: string) {
-  const userId = assertUserId(p.userId);
+  const userId = String(p.userId || '').trim();
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) throw new Error('Identifiant utilisateur invalide.');
   if (userId === callerId) throw new Error('Impossible de supprimer ton propre compte.');
-  const { error } = await admin.auth.admin.deleteUser(userId); // gp_profiles supprimé en cascade
+  const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) throw error;
   return { user_id: userId };
 }
 
 async function resetPassword(p: Record<string, unknown>) {
-  const userId = assertUserId(p.userId);
+  const userId = String(p.userId || '').trim();
   const password = String(p.password || '');
   assertPassword(password);
   const { error } = await admin.auth.admin.updateUserById(userId, { password });
