@@ -36,7 +36,7 @@ const TABLE_LABEL = {
 
 // Données en mémoire, rechargées par section
 const DB = {
-  membres: [], commerces: [], lois: [], operations: [], catalogue: [], impots: [],
+  membres: [], commerces: [], lois: [], operations: [], impots: [],
   params: { taux_taxe_commerce: '10', periode_label: 'semaine' },
 };
 

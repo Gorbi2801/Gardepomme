@@ -93,7 +93,7 @@ function verserPaie() {
     onOk: async () => {
       await apiInsert('gp_operations', {
         date_op: document.getElementById('paie-date').value || today(),
-        sens: 'Dépense', categorie: 'Salaires',
+        sens: 'Dépense', categorie: 'Salaires', auteur: currentAuthor(),
         libelle: document.getElementById('paie-lib').value.trim() || 'Paie des effectifs',
         montant: total, details: lignes.join('\n'),
       });

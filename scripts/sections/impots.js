@@ -104,7 +104,7 @@ function payerImpot(id) {
     onOk: async () => {
       const d = document.getElementById('pay-date').value || today();
       await apiInsert('gp_operations', {
-        date_op: d, sens: 'Dépense', categorie: 'Impôts',
+        date_op: d, sens: 'Dépense', categorie: 'Impôts', auteur: currentAuthor(),
         libelle: `${i.libelle} — ${i.beneficiaire}`, montant: num(i.montant),
         details: i.periode ? `Période : ${i.periode}` : null, impot_id: i.id,
       });
@@ -122,7 +122,7 @@ async function percevoirTaxe(id, silent = false) {
   if (!silent && !await confirmBox(`Percevoir ${septims(due)} de taxe sur « ${c.nom} » ?`, 'Percevoir')) return;
   try {
     await apiInsert('gp_operations', {
-      date_op: today(), sens: 'Recette', categorie: 'Taxes commerciales',
+      date_op: today(), sens: 'Recette', categorie: 'Taxes', auteur: currentAuthor(),
       libelle: `Taxe commerciale — ${c.nom}`, montant: due, commerce_id: c.id,
       details: `${tauxTaxe()} % de ${septims(c.benefice)} de bénéfice déclaré`,
     });
