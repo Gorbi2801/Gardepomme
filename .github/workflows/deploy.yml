@@ -35,15 +35,18 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASEURL }}
           SUPABASE_KEY: ${{ secrets.SUPABASEKEY }}
           AUTH_EMAIL_DOMAIN: ${{ secrets.AUTHEMAILDOMAIN }}
+          INTENDANCE_PASSWORD: ${{ secrets.INTENDANCEPASSWORD }}
         run: |
           test -n "$SUPABASE_URL" || { echo "Secret SUPABASEURL manquant"; exit 1; }
           test -n "$SUPABASE_KEY" || { echo "Secret SUPABASEKEY manquant"; exit 1; }
+          test -n "$INTENDANCE_PASSWORD" || { echo "Secret INTENDANCEPASSWORD manquant"; exit 1; }
           node <<'NODE'
           const fs = require('fs');
           const config = {
             supabaseUrl: process.env.SUPABASE_URL,
             supabaseKey: process.env.SUPABASE_KEY,
             authEmailDomain: process.env.AUTH_EMAIL_DOMAIN || 'gardepomme.invalid',
+            intendancePassword: process.env.INTENDANCE_PASSWORD,
           };
           fs.writeFileSync('site/scripts/config.js',
             `window.GardepommeConfig = Object.freeze(${JSON.stringify(config, null, 2)});\n`);

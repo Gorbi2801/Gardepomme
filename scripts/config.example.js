@@ -5,4 +5,5 @@ window.GardepommeConfig = Object.freeze({
   supabaseUrl: 'https://PROJECT_REF.supabase.co',
   supabaseKey: 'sb_publishable_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
   authEmailDomain: 'gardepomme.invalid',
+  intendancePassword: 'mot_de_passe_de_test',
 });

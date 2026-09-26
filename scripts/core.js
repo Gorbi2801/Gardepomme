@@ -1,20 +1,19 @@
 // ══════════════════════════════════════════════════════════════════════
 //  CŒUR — client Supabase, état, outils communs
-//  La clé utilisée est la clé publique (publishable/anon). La sécurité
-//  repose sur les RLS de 01_schema.sql. Ne jamais y mettre la service_role.
 // ══════════════════════════════════════════════════════════════════════
-// Déclarer les sections avant toute initialisation externe : même si la
-// configuration Supabase est absente, bootstrap.js peut afficher une erreur
-// explicite sans provoquer un second plantage sur SECTIONS.
+// Mode intendance — mot de passe partagé, modifié par auth.js
+let _editMode = false;
+let _intendantName = '';
+function currentAuthor() { return _intendantName || 'Intendance'; }
+
 const SECTIONS = {
-  accueil:   { label: 'Tableau de bord', public: true },
-  effectifs: { label: 'Effectifs & salaires', public: true, editable: true },
-  commerces: { label: 'Commerces', public: true, editable: true },
-  codex:     { label: 'Codex', public: true, editable: true },
-  finances:  { label: 'Trésor', public: true, editable: true },
-  impots:    { label: 'Impôts', public: true, editable: true },
-  journal:   { label: 'Historique', public: false },
-  comptes:   { label: 'Comptes', public: false, superadmin: true },
+  accueil:   { label: 'Tableau de bord' },
+  effectifs: { label: 'Effectifs & salaires', editable: true },
+  commerces: { label: 'Commerces', editable: true },
+  codex:     { label: 'Codex', editable: true },
+  finances:  { label: 'Trésor', editable: true },
+  impots:    { label: 'Impôts', editable: true },
+  journal:   { label: 'Historique' },
 };
 
 const CFG = window.GardepommeConfig;
@@ -68,19 +67,9 @@ function periode() { return DB.params.periode_label || 'semaine'; }
 function tauxTaxe() { return Math.max(0, num(DB.params.taux_taxe_commerce)); }
 
 // ── Droits ──────────────────────────────────────────────────────────
-function isLogged() { return !!session; }
-function canEdit(section) {
-  if (!session) return false;
-  if (session.isSuperadmin) return true;
-  return session.sectionsEdit.includes(section);
-}
-function canSee(section) {
-  const s = SECTIONS[section];
-  if (!s) return false;
-  if (s.superadmin) return !!session?.isSuperadmin;
-  if (!s.public) return isLogged();
-  return true;
-}
+function isLogged() { return _editMode; }
+function canEdit(section) { return _editMode; }
+function canSee(section) { return !!SECTIONS[section]; }
 
 // ── API (supabase-js) ───────────────────────────────────────────────
 async function apiList(table, order = 'created_at', asc = true) {
