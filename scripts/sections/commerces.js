@@ -1,12 +1,14 @@
 // ══════════════════════════════════════════════════════════════════════
 //  REGISTRE DES COMMERCES
 // ══════════════════════════════════════════════════════════════════════
+const SECTEURS_AGREMENT = ['Artisanat', 'Divertissement', 'Récolte', 'Terre (pâtres & paysans)'];
 const COMMERCE_ACTIVITES = ['Verger & cidrerie', 'Ferme', 'Taverne', 'Forge', 'Marchand général', 'Alchimie', 'Scierie', 'Artisanat', 'Écurie', 'Autre'];
 const COMMERCE_STATUTS = ['Ouvert', 'Suspendu', 'Fermé'];
 
 const COMMERCE_FIELDS = [
   { key: 'nom', label: 'Nom du commerce', required: true },
   { key: 'activite', label: 'Activité', type: 'datalist', options: COMMERCE_ACTIVITES },
+  { key: 'secteur', label: 'Secteur fiscal (Agrément)', type: 'select', options: SECTEURS_AGREMENT, hint: 'Détermine le forfait fixe de la Patente (Art. IV).' },
   { key: 'proprietaire', label: 'Propriétaire / gérant' },
   { key: 'emplacement', label: 'Emplacement' },
   { key: 'benefice', label: 'Bénéfice déclaré (septims)', type: 'number', hint: 'Par période, sert au calcul de la taxe.' },
@@ -40,7 +42,7 @@ RENDERERS.commerces = () => {
       <td data-sort="${mem.length}">${mem.length ? `<details class="members"><summary>${mem.length} membre${mem.length > 1 ? 's' : ''}</summary><ul>${mem.map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>` : '—'}</td>
       <td><span class="pill pill-${norm(c.statut)}">${esc(c.statut)}</span></td>
       <td class="num" data-sort="${num(c.benefice)}">${septims(c.benefice)}</td>
-      <td class="num" data-sort="${taxeDue(c)}">${c.exonere ? '<span class="pill">Exonéré</span>' : septims(taxeDue(c))}${last ? `<span class="note-inline">perçue le ${fmtDate(last.date_op)}</span>` : ''}</td>
+      <td class="num" data-sort="${taxeDue(c)}">${c.exonere ? '<span class="pill">Exonéré</span>' : (() => { const d = taxeDetail(c); return `${septims(d.total)}<span class="note-inline">Agrément ${septims(d.patente)} + Taille ${septims(d.taille)}</span>`; })()}${last ? `<span class="note-inline muted-text">perçue le ${fmtDate(last.date_op)}</span>` : ''}</td>
       ${rowActions('commerces', `editCommerce('${c.id}')`, `delCommerce('${c.id}')`)}
     </tr>`;
   }).join('');

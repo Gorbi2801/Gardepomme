@@ -15,10 +15,12 @@ const MEMBRE_FIELDS = [
   { key: 'statut', label: 'Statut', type: 'select', options: MEMBRE_STATUTS },
   { key: 'date_entree', label: "Date d'entrée", type: 'date' },
   { key: 'notes', label: 'Notes', type: 'textarea', rows: 3 },
+  { key: 'salaire_paye', label: 'Salaire payé cette période', type: 'checkbox', full: true },
 ];
 
 function membresPayes() { return DB.membres.filter(m => m.statut === 'Actif' && num(m.salaire) > 0); }
 function masseSalariale() { return membresPayes().reduce((s, m) => s + num(m.salaire), 0); }
+function masseRestante() { return membresPayes().filter(m => !m.salaire_paye).reduce((s, m) => s + num(m.salaire), 0); }
 
 RENDERERS.effectifs = () => {
   const edit = canEdit('effectifs');
@@ -39,6 +41,11 @@ RENDERERS.effectifs = () => {
       <td data-sort="${esc(m.date_entree || '')}">${fmtDate(m.date_entree)}</td>
       <td><span class="pill pill-${norm(m.statut)}">${esc(m.statut)}</span></td>
       <td class="num" data-sort="${num(m.salaire)}">${septims(m.salaire)}</td>
+      <td class="center">${num(m.salaire) > 0 && m.statut === 'Actif'
+        ? `<input type="checkbox" class="salaire-check" aria-label="Salaire payé"
+             ${m.salaire_paye ? 'checked' : ''}
+             ${canEdit('effectifs') ? `onchange="togglePaiement('${m.id}', this.checked)"` : 'disabled'}>`
+        : '<span class="muted-text">—</span>'}</td>
       ${rowActions('effectifs', `editMembre('${m.id}')`, `delMembre('${m.id}')`)}
     </tr>`).join('');
 
@@ -49,17 +56,20 @@ RENDERERS.effectifs = () => {
     <div class="ruled"><span>Masse salariale / ${esc(periode())}</span><strong>${septims(masseSalariale())}</strong></div>
   </div>
   ${edit ? `<div class="callout">
-      <p>Prochaine paie : <strong>${septims(masseSalariale())}</strong> pour ${membresPayes().length} personne(s) en statut Actif.
-      ${lastPaie ? `Dernière paie enregistrée le ${fmtDate(lastPaie.date_op)}.` : 'Aucune paie enregistrée pour le moment.'}</p>
-      <button class="btn btn-primary" onclick="verserPaie()">Verser la paie</button>
+      <p>Masse salariale totale : <strong>${septims(masseSalariale())}</strong> pour ${membresPayes().length} personne(s) en statut Actif.
+      Reste à payer : <strong>${septims(masseRestante())}</strong>.</p>
+      <div class="callout-actions">
+        <button class="btn btn-primary" onclick="verserPaie()">Verser la paie & marquer tous payés</button>
+        <button class="btn btn-ghost" onclick="resetPaiements()" title="Remet tous les salaires à Non payé pour une nouvelle période">Nouvelle période</button>
+      </div>
     </div>` : ''}
   <div class="sheet">
     ${toolbar({ section: 'effectifs', searchId: 'mem-q', onSearch: 'filterMembres()', filters, addLabel: 'Ajouter une personne', onAdd: 'editMembre()',
       extra: `<button class="btn btn-ghost" onclick="exportCsv('mem-table','effectifs_gardepomme.csv')">Exporter</button>` })}
     <div class="table-wrap"><table id="mem-table" class="ledger">
-      <thead><tr>${th('Nom')}${th('Catégorie')}${th('Fonction')}${th('Race')}${th('Entrée')}${th('Statut')}${th('Salaire', 'num')}${edit ? '<th class="actions"><span class="sr-only">Actions</span></th>' : ''}</tr></thead>
-      <tbody id="mem-tbody">${rows || emptyRow(8, edit ? "Personne n'est encore inscrit. Ajoute le premier membre de la baronnie." : 'Aucun membre inscrit pour le moment.')}</tbody>
-      <tfoot><tr class="total"><td colspan="6">Total des salaires actifs</td><td class="num">${septims(masseSalariale())}</td>${edit ? '<td></td>' : ''}</tr></tfoot>
+      <thead><tr>${th('Nom')}${th('Catégorie')}${th('Fonction')}${th('Race')}${th('Entrée')}${th('Statut')}${th('Salaire', 'num')}<th class="center">Payé</th>${edit ? '<th class="actions"><span class="sr-only">Actions</span></th>' : ''}</tr></thead>
+      <tbody id="mem-tbody">${rows || emptyRow(9, edit ? "Personne n'est encore inscrit. Ajoute le premier membre de la baronnie." : 'Aucun membre inscrit pour le moment.')}</tbody>
+      <tfoot><tr class="total"><td colspan="7">Total des salaires actifs</td><td class="num">${septims(masseSalariale())}</td>${edit ? '<td></td>' : ''}</tr></tfoot>
     </table></div>
   </div>
   ${sectionHistory(['gp_membres'])}`;
@@ -75,6 +85,28 @@ function editMembre(id) {
 function delMembre(id) {
   const m = DB.membres.find(x => x.id === id);
   removeRow({ table: 'gp_membres', section: 'effectifs', id, label: fullName(m), after: reload });
+}
+
+async function togglePaiement(id, paye) {
+  try {
+    await apiUpdate('gp_membres', id, { salaire_paye: paye });
+    const m = DB.membres.find(x => x.id === id);
+    if (m) m.salaire_paye = paye;
+    // Rafraîchit juste le résumé sans recharger toute la page
+    renderActive();
+  } catch (e) { toast(errMsg(e), 'err'); }
+}
+
+async function resetPaiements() {
+  if (!await confirmBox('Remettre tous les salaires à "Non payé" pour commencer une nouvelle période ?', 'Nouvelle période')) return;
+  try {
+    const ids = DB.membres.filter(m => m.salaire_paye).map(m => m.id);
+    for (const id of ids) {
+      await apiUpdate('gp_membres', id, { salaire_paye: false });
+    }
+    toast('Paiements réinitialisés pour la nouvelle période.');
+    await reload();
+  } catch (e) { toast(errMsg(e), 'err'); }
 }
 
 function verserPaie() {
