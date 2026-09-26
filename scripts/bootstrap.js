@@ -42,17 +42,18 @@
   if (SECTIONS[hash]) activeSection = hash;
 
   // ── Vérification du premier démarrage ──────────────────────────────
-  // Si aucun superadmin n'existe, on propose la configuration initiale
-  // avant de lancer le site normalement.
+  // Appelle l'Edge Function pour savoir si un superadmin existe déjà.
+  // Pas de dépendance au cache PostgREST.
   try {
-    const { data: hasSuperadmin, error } = await sb.rpc('gp_has_superadmin');
-    if (!error && hasSuperadmin === false) {
+    const { data, error } = await sb.functions.invoke('gp-admin-users', {
+      body: { action: 'checkSetup' },
+    });
+    if (!error && data?.result?.needsSetup === true) {
       showFirstSetup();
       return;
     }
   } catch (_) {
-    // Si la fonction SQL n'existe pas encore (02_premier_demarrage.sql
-    // pas encore exécuté), on continue le démarrage normal.
+    // Si l'Edge Function n'est pas encore déployée, on continue normalement.
   }
 
   await loadSession();
