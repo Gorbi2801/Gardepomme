@@ -45,16 +45,12 @@
   // Appelle l'Edge Function pour savoir si un superadmin existe déjà.
   // Pas de dépendance au cache PostgREST.
   try {
-    const { data, error } = await sb.functions.invoke('gp-admin-users', {
-      body: { action: 'checkSetup' },
-    });
-    if (!error && data?.result?.needsSetup === true) {
-      showFirstSetup();
-      return;
-    }
-  } catch (_) {
-    // Si l'Edge Function n'est pas encore déployée, on continue normalement.
-  }
+    const { count } = await sb
+      .from('gp_profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_superadmin', true);
+    if (count === 0) { showFirstSetup(); return; }
+  } catch (_) {}
 
   await loadSession();
   await refreshAll();
