@@ -355,3 +355,13 @@ body.is-loading .loading-bar { width: 70%; transition: width 4s cubic-bezier(.1,
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ── Écran de premier démarrage ───────────────────────────────────── */
+.setup-wrap { display:flex; align-items:flex-start; justify-content:center; padding:3rem 1rem; min-height:70vh; }
+.setup-card {
+  background:var(--feuille); border:1px solid var(--filet); border-top:4px solid var(--verger);
+  border-radius:var(--radius); padding:2.2rem clamp(1.2rem,4vw,2.8rem) 2rem;
+  width:min(560px,100%); box-shadow:0 8px 32px rgba(20,25,18,.12);
+}
+.setup-card h2 { font-family:var(--font-sc); font-weight:700; font-size:1.7rem; margin-bottom:.5rem; }
+.setup-card .lead-in { color:var(--encre-2); margin-bottom:1.4rem; }
