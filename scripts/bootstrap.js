@@ -38,11 +38,11 @@
 
   // Vérifie si un superadmin existe déjà
   try {
-    const { count } = await sb
+    const { count, error } = await sb
       .from('gp_profiles')
       .select('*', { count: 'exact', head: true })
       .eq('is_superadmin', true);
-    if (count === 0) {
+    if (!error && count !== null && count === 0) {
       showFirstSetup();
       return;
     }
@@ -89,13 +89,21 @@ function showFirstSetup() {
           </div>
         </div>
         <p id="su-err" class="modal-err" role="alert"></p>
-        <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:.6rem">
+          <button class="btn btn-ghost" onclick="skipSetup()">
+            J'ai déjà un compte →
+          </button>
           <button class="btn btn-primary" id="su-btn" onclick="doFirstSetup()">
             Créer le compte superadmin
           </button>
         </div>
       </div>
     </div>`;
+}
+
+async function skipSetup() {
+  await loadSession();
+  await refreshAll();
 }
 
 async function doFirstSetup() {
