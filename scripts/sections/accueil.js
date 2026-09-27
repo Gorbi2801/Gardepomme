@@ -30,7 +30,7 @@ RENDERERS.accueil = () => {
       <td class="num ${o.sens === 'Recette' ? 'in' : 'out'}">${septimsSigned(signed(o))}</td></tr>`).join('');
 
   return `<section class="hero">
-    <img src="assets/blason.svg" alt="" class="hero-seal" width="96" height="112">
+    <img src="assets/blason.png" alt="" class="hero-seal" width="96" height="96" style="object-fit:contain">
     <div class="hero-text">
       <h2>Baronnie de Gardepomme</h2>
       <p>Vassale du Comté de Bruma. Registres tenus au nom du Baron.</p>
