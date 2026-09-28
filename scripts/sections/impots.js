@@ -1,21 +1,18 @@
 // ══════════════════════════════════════════════════════════════════════
-//  IMPÔTS — Agrément (patente fixe) + Taille (progressive sur bénéfice)
-//  Conforme aux Lois Fiscales du Comté de Bruma, Art. IV et V
+//  IMPÔTS — tableau de bord automatique
+//  Lecture seule : tout est calculé depuis les commerces et les paramètres.
+//  Pour enregistrer un paiement → Trésor → Dépense → Impôts.
 // ══════════════════════════════════════════════════════════════════════
 
-// Agrément (patente hebdomadaire fixe par secteur)
+// ── Calculs fiscaux ──────────────────────────────────────────────────
 const AGREMENT = {
   'Terre (pâtres & paysans)': 0,
   'Récolte':                  200,
   'Divertissement':            220,
   'Artisanat':                 220,
 };
+function patenteAmount(secteur) { return AGREMENT[secteur] ?? 220; }
 
-function patenteAmount(secteur) {
-  return AGREMENT[secteur] ?? 220;
-}
-
-// Taille progressive sur bénéfice (Art. V)
 function calculerTaille(benefice) {
   if (benefice <= 0) return 0;
   const tranches = [[500, 0], [1000, 0.10], [1000, 0.15], [1500, 0.25], [Infinity, 0.35]];
@@ -28,145 +25,109 @@ function calculerTaille(benefice) {
   }
   return impot;
 }
-
 function taxeDue(c) {
   if (c.exonere || c.statut !== 'Ouvert') return 0;
   return patenteAmount(c.secteur) + calculerTaille(num(c.benefice));
 }
 function taxeDetail(c) {
-  const p = patenteAmount(c.secteur);
-  const t = calculerTaille(num(c.benefice));
+  const p = patenteAmount(c.secteur), t = calculerTaille(num(c.benefice));
   return { patente: p, taille: t, total: p + t };
 }
 function derniereTaxe(c) {
   return DB.operations.find(o => o.commerce_id === c.id && o.categorie === 'Taxes');
 }
 
-const IMPOT_FIELDS = [
-  { key: 'libelle', label: 'Impôt', required: true, hint: 'Ex : Cens de Sujétion, loyer, amende…' },
-  { key: 'beneficiaire', label: 'À verser à', default: 'Comté de Bruma' },
-  { key: 'montant', label: 'Montant (septims)', type: 'number', required: true },
-  { key: 'echeance', label: 'Échéance', type: 'date' },
-  { key: 'periode', label: 'Période concernée', hint: 'Ex : semaine 12, Sundas 4E 226' },
-  { key: 'notes', label: 'Référence légale & notes', type: 'textarea', rows: 3 },
-];
-
-function impotEnRetard(i) { return i.statut !== 'Payé' && i.echeance && i.echeance < today(); }
-function impotsAPayer()   { return DB.impots.filter(i => i.statut !== 'Payé'); }
+// ── Paramètres fixes ─────────────────────────────────────────────────
+function censMontant()  { return num(DB.params.cens_montant  ?? 45); }
+function censSujets()   { return num(DB.params.cens_sujets   ?? 0); }
+function loyerTotal()   { return num(DB.params.loyer_total   ?? 0); }
+function totalCens()    { return censMontant() * censSujets(); }
 
 RENDERERS.impots = () => {
   const edit = canEdit('impots');
-  const dus = impotsAPayer();
-  const totalDu = dus.reduce((s, i) => s + num(i.montant), 0);
-  const retard  = dus.filter(impotEnRetard);
-  const next    = dus.filter(i => i.echeance).sort((a, b) => a.echeance.localeCompare(b.echeance))[0];
   const taxables = DB.commerces.filter(c => taxeDue(c) > 0);
   const totalTaxes = taxables.reduce((s, c) => s + taxeDue(c), 0);
+  const totalFixed = totalCens() + loyerTotal();
+  const grandTotal = totalTaxes + totalFixed;
 
-  const impRows = [...DB.impots]
-    .sort((a, b) => (a.statut === 'Payé') - (b.statut === 'Payé') ||
-      String(a.echeance || '9').localeCompare(String(b.echeance || '9')))
-    .map(i => {
-      const late = impotEnRetard(i);
-      const st = i.statut === 'Payé'
-        ? `<span class="pill pill-paye">Payé le ${fmtDate(i.paye_le)}</span>`
-        : late ? '<span class="pill pill-retard">En retard</span>'
-               : '<span class="pill pill-apayer">À payer</span>';
-      const pay = edit && i.statut !== 'Payé'
-        ? `<button class="btn btn-small btn-primary" onclick="payerImpot('${i.id}')">Payer</button>` : '';
-      return `<tr data-s="${esc(norm([i.libelle, i.beneficiaire, i.periode, i.notes].join(' ')))}"
-              class="${i.statut === 'Payé' ? 'muted' : late ? 'late' : ''}">
-        <td><strong>${esc(i.libelle)}</strong>${i.notes ? `<span class="note-inline">${esc(i.notes)}</span>` : ''}</td>
-        <td>${esc(i.beneficiaire)}</td>
-        <td>${esc(i.periode || '—')}</td>
-        <td data-sort="${esc(i.echeance || '')}">${fmtDate(i.echeance)}</td>
-        <td>${st}</td>
-        <td class="num" data-sort="${num(i.montant)}">${septims(i.montant)}</td>
-        ${edit ? `<td class="actions">${pay}
-          <button class="icon-btn" aria-label="Modifier" onclick="editImpot('${i.id}')">✎</button>
-          <button class="icon-btn danger" aria-label="Supprimer" onclick="delImpot('${i.id}')">✕</button></td>` : ''}
-      </tr>`;
-    }).join('');
-
+  // Taxes commerciales
   const taxRows = taxables.map(c => {
     const d = taxeDetail(c);
     const last = derniereTaxe(c);
-    return `<tr data-s="${esc(norm(c.nom))}">
+    return `<tr>
       <td><strong>${esc(c.nom)}</strong><span class="note-inline">${esc(c.secteur || '—')} · ${esc(c.proprietaire || '')}</span></td>
       <td class="num">${septims(c.benefice)}</td>
       <td class="num muted-text">${septims(d.patente)}</td>
       <td class="num muted-text">${septims(d.taille)}</td>
       <td class="num"><strong>${septims(d.total)}</strong></td>
-      <td>${last ? fmtDate(last.date_op) : 'Jamais'}</td>
+      <td class="muted-text">${last ? fmtDate(last.date_op) : 'Jamais'}</td>
       ${edit ? `<td class="actions"><button class="btn btn-small btn-primary" onclick="percevoirTaxe('${c.id}')">Percevoir</button></td>` : ''}
     </tr>`;
   }).join('');
 
-  return `${sectionHead('Impôts', 'Ce que la baronnie doit verser au Comté, et les taxes perçues sur ses commerces (Agrément + Taille, Art. IV & V).')}
+  return `${sectionHead('Impôts', 'Récapitulatif automatique des taxes dues cette semaine. Tout se calcule depuis les bénéfices des commerces et les paramètres fixes ci-dessous.')}
+
   <div class="summary-strip">
-    <div class="ruled"><span>Reste à verser</span><strong>${septims(totalDu)}</strong></div>
-    <div class="${retard.length ? 'alert' : ''}"><span>En retard</span><strong>${retard.length}</strong></div>
-    <div><span>Prochaine échéance</span><strong>${next ? fmtDate(next.echeance) : '—'}</strong></div>
-    <div><span>Taxes à percevoir</span><strong>${septims(totalTaxes)}</strong></div>
+    <div><span>Taxes commerciales</span><strong>${septims(totalTaxes)}</strong></div>
+    <div><span>Cens de Sujétion (${censSujets()} sujets)</span><strong>${septims(totalCens())}</strong></div>
+    <div><span>Loyers</span><strong>${septims(loyerTotal())}</strong></div>
+    <div class="ruled"><span>Total dû cette semaine</span><strong>${septims(grandTotal)}</strong></div>
   </div>
 
   <div class="sheet">
-    <h3 class="sheet-title">Dû au Comté</h3>
-    ${toolbar({ section: 'impots', searchId: 'imp-q', onSearch: "filterTable('imp-tbody','imp-q')",
-      addLabel: 'Ajouter un impôt dû', onAdd: 'editImpot()' })}
-    <div class="table-wrap"><table class="ledger">
-      <thead><tr>${th('Impôt')}${th('À verser à')}${th('Période')}${th('Échéance')}${th('Statut')}${th('Montant','num')}
-        ${edit ? '<th class="actions"><span class="sr-only">Actions</span></th>' : ''}
-      </tr></thead>
-      <tbody id="imp-tbody">${impRows || emptyRow(7, edit ? 'Aucun impôt enregistré. Ajoute ce que la baronnie doit au Comté.' : 'Aucun impôt enregistré.')}</tbody>
-      <tfoot><tr class="total"><td colspan="5">Reste à verser</td><td class="num">${septims(totalDu)}</td>${edit ? '<td></td>' : ''}</tr></tfoot>
-    </table></div>
-  </div>
-
-  <div class="sheet">
-    <h3 class="sheet-title">Taxe commerciale — Agrément + Taille</h3>
-    <div class="callout plain">
-      <p>Calcul selon les Lois Fiscales Art. IV & V. Agrément : forfait fixe par secteur. Taille : progressif (0 % → 35 %) sur le bénéfice déclaré.</p>
-      ${edit && taxables.length ? `<div class="callout-actions"><button class="btn btn-primary" onclick="percevoirTout()">Tout percevoir (${septims(totalTaxes)})</button></div>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.8rem">
+      <h3 class="sheet-title" style="margin:0">Taxe commerciale — Agrément + Taille</h3>
+      ${edit && taxables.length ? `<button class="btn btn-primary" onclick="percevoirTout()">Tout percevoir (${septims(totalTaxes)})</button>` : ''}
     </div>
+    <p class="lead-in">Calculé depuis les bénéfices déclarés dans les Commerces. Mise à jour automatique à chaque modification.</p>
     <div class="table-wrap"><table class="ledger">
-      <thead><tr><th>Commerce</th>${th('Bénéfice','num')}${th('Agrément','num')}${th('Taille','num')}${th('Total dû','num')}<th>Dernière perception</th>
+      <thead><tr>
+        <th>Commerce</th>${th('Bénéfice','num')}${th('Agrément','num')}${th('Taille','num')}${th('Total dû','num')}
+        <th>Dernière perception</th>
         ${edit ? '<th class="actions"><span class="sr-only">Actions</span></th>' : ''}
       </tr></thead>
-      <tbody>${taxRows || emptyRow(7, 'Aucun commerce taxable.')}</tbody>
-      <tfoot><tr class="total"><td colspan="4">Total à percevoir</td><td class="num">${septims(totalTaxes)}</td><td></td>${edit ? '<td></td>' : ''}</tr></tfoot>
+      <tbody>${taxRows || emptyRow(7, 'Aucun commerce taxable ouvert.')}</tbody>
+      <tfoot><tr class="total">
+        <td colspan="4">Total taxes commerciales</td>
+        <td class="num">${septims(totalTaxes)}</td>
+        <td></td>${edit ? '<td></td>' : ''}
+      </tr></tfoot>
     </table></div>
   </div>
-  ${sectionHistory(['gp_impots', 'gp_parametres'])}`;
+
+  <div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.8rem">
+      <h3 class="sheet-title" style="margin:0">Impôts fixes (Art. II & III)</h3>
+      ${edit ? `<button class="btn btn-ghost" onclick="editParamsFiscaux()">Modifier</button>` : ''}
+    </div>
+    <p class="lead-in">Montants fixes à configurer une seule fois. Le Cens de Sujétion est de ${septims(censMontant())} par sujet par semaine (Art. II).</p>
+    <table class="ledger">
+      <thead><tr><th>Impôt</th><th>Détail</th><th class="num">Montant hebdo</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Cens de Sujétion</strong></td><td>${censSujets()} sujet(s) × ${septims(censMontant())}</td><td class="num">${septims(totalCens())}</td></tr>
+        <tr><td><strong>Loyers</strong></td><td>Total des parcelles</td><td class="num">${septims(loyerTotal())}</td></tr>
+      </tbody>
+      <tfoot><tr class="total"><td colspan="2">Total fixe</td><td class="num">${septims(totalFixed)}</td></tr></tfoot>
+    </table>
+  </div>`;
 };
 
-function editImpot(id) {
-  const row = id ? DB.impots.find(i => i.id === id) : null;
-  openEditor({ table: 'gp_impots', section: 'impots', title: 'impôt', fields: IMPOT_FIELDS, row, after: reload });
-}
-function delImpot(id) {
-  const i = DB.impots.find(x => x.id === id);
-  removeRow({ table: 'gp_impots', section: 'impots', id, label: i?.libelle, after: reload });
-}
-
-function payerImpot(id) {
-  const i = DB.impots.find(x => x.id === id);
-  if (!i) return;
+function editParamsFiscaux() {
+  const fields = [
+    { key: 'cens_montant', label: 'Montant du Cens de Sujétion (par sujet)', type: 'number', default: 45, hint: 'Art. II — 45 sept. par semaine.' },
+    { key: 'cens_sujets', label: 'Nombre de sujets assujettis', type: 'number', default: 0 },
+    { key: 'loyer_total', label: 'Total des loyers hebdomadaires', type: 'number', default: 0, hint: 'Art. III — somme de toutes les parcelles.' },
+  ];
   openModal({
-    title: 'Payer un impôt',
-    body: `<p class="modal-text">${esc(i.libelle)} — <strong>${septims(i.montant)}</strong> à verser à ${esc(i.beneficiaire)}.</p>
-      <div class="form-grid"><div class="field"><label for="pay-date">Date du paiement</label>
-        <input id="pay-date" type="date" value="${today()}"></div></div>`,
-    okLabel: `Payer ${septims(i.montant)}`,
+    title: 'Paramètres fiscaux fixes',
+    body: renderFields(fields, DB.params),
+    okLabel: 'Enregistrer',
     onOk: async () => {
-      const d = document.getElementById('pay-date').value || today();
-      await apiInsert('gp_operations', {
-        date_op: d, sens: 'Dépense', categorie: 'Impôts', auteur: currentAuthor(),
-        libelle: `${i.libelle} — ${i.beneficiaire}`, montant: num(i.montant),
-        details: i.periode ? `Période : ${i.periode}` : null, impot_id: i.id,
-      });
-      await apiUpdate('gp_impots', i.id, { statut: 'Payé', paye_le: d });
-      toast(`Impôt payé : ${septims(i.montant)} sortis du trésor.`);
+      const v = readFields(fields);
+      for (const [cle, valeur] of Object.entries(v)) {
+        await sb.from('gp_parametres').upsert({ cle, valeur: String(valeur ?? 0) });
+      }
+      toast('Paramètres enregistrés.');
       await reload();
     },
   });
@@ -177,7 +138,8 @@ async function percevoirTaxe(id, silent = false) {
   const due = taxeDue(c || {});
   if (!c || !due) return;
   const d = taxeDetail(c);
-  if (!silent && !await confirmBox(`Percevoir ${septims(due)} sur « ${c.nom} » ?\n(Agrément ${septims(d.patente)} + Taille ${septims(d.taille)})`, 'Percevoir')) return;
+  if (!silent && !await confirmBox(
+    `Percevoir ${septims(due)} sur « ${c.nom} » ?\nAgrément ${septims(d.patente)} + Taille ${septims(d.taille)}`, 'Percevoir')) return;
   try {
     await apiInsert('gp_operations', {
       date_op: today(), sens: 'Recette', categorie: 'Taxes', auteur: currentAuthor(),
@@ -194,6 +156,5 @@ async function percevoirTout() {
   if (!await confirmBox(`Percevoir la taxe sur ${list.length} commerce(s), soit ${septims(total)} ?`, 'Tout percevoir')) return;
   let ok = 0;
   for (const c of list) { try { await percevoirTaxe(c.id, true); ok++; } catch (e) { break; } }
-  toast(`${ok} taxe(s) perçue(s).`);
-  await reload();
+  toast(`${ok} taxe(s) perçue(s).`); await reload();
 }
