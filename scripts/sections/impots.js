@@ -1,16 +1,17 @@
 // ══════════════════════════════════════════════════════════════════════
 //  IMPÔTS — tableau de bord automatique
-//  Lecture seule : tout est calculé depuis les commerces et les paramètres.
-//  Pour enregistrer un paiement → Trésor → Dépense → Impôts.
+//  Taille de la baronnie = calculée depuis les opérations du trésor (semaine courante).
+//  Commerces enregistrés = calculés depuis leur bénéfice déclaré.
 // ══════════════════════════════════════════════════════════════════════
 
-// ── Calculs fiscaux ──────────────────────────────────────────────────
 const AGREMENT = {
   'Terre (pâtres & paysans)': 0,
-  'Récolte':                  200,
-  'Divertissement':            220,
-  'Artisanat':                 220,
+  'Récolte': 200,
+  'Divertissement': 220,
+  'Artisanat': 220,
 };
+const SECTEURS_LISTE = Object.keys(AGREMENT);
+
 function patenteAmount(secteur) { return AGREMENT[secteur] ?? 220; }
 
 function calculerTaille(benefice) {
@@ -25,6 +26,7 @@ function calculerTaille(benefice) {
   }
   return impot;
 }
+
 function taxeDue(c) {
   if (c.exonere || c.statut !== 'Ouvert') return 0;
   return patenteAmount(c.secteur) + calculerTaille(num(c.benefice));
@@ -37,25 +39,58 @@ function derniereTaxe(c) {
   return DB.operations.find(o => o.commerce_id === c.id && o.categorie === 'Taxes');
 }
 
-// ── Paramètres fixes ─────────────────────────────────────────────────
-function censMontant()  { return num(DB.params.cens_montant  ?? 45); }
-function censSujets()   { return num(DB.params.cens_sujets   ?? 0); }
-function loyerTotal()   { return num(DB.params.loyer_total   ?? 0); }
-function totalCens()    { return censMontant() * censSujets(); }
+// Bénéfice hebdo de la baronnie depuis le trésor (Ventes − Achats de la semaine)
+function baronnieBeneficeHebdo() {
+  const { monday, sunday } = weekRange();
+  const from = monday.toISOString().slice(0, 10);
+  const to   = sunday.toISOString().slice(0, 10);
+  const ops  = DB.operations.filter(o => o.date_op >= from && o.date_op <= to);
+  const rec  = ops.filter(o => o.sens === 'Recette' && o.categorie === 'Vente').reduce((s, o) => s + num(o.montant), 0);
+  const dep  = ops.filter(o => o.sens === 'Dépense' && o.categorie === 'Achat').reduce((s, o) => s + num(o.montant), 0);
+  return { ventes: rec, achats: dep, benefice: Math.max(0, rec - dep) };
+}
+
+function baronnieSecteur() { return DB.params.baronnie_secteur || 'Artisanat'; }
+function censMontant()  { return num(DB.params.cens_montant ?? 45); }
+function censSujets()   { return num(DB.params.cens_sujets  ?? 0); }
+function loyerTotal()   { return num(DB.params.loyer_total  ?? 0); }
 
 RENDERERS.impots = () => {
   const edit = canEdit('impots');
-  const taxables = DB.commerces.filter(c => taxeDue(c) > 0);
-  const totalTaxes = taxables.reduce((s, c) => s + taxeDue(c), 0);
-  const totalFixed = totalCens() + loyerTotal();
-  const grandTotal = totalTaxes + totalFixed;
 
-  // Taxes commerciales
+  // Baronnie
+  const { ventes, achats, benefice } = baronnieBeneficeHebdo();
+  const baronPatente = patenteAmount(baronnieSecteur());
+  const baronTaille  = calculerTaille(benefice);
+  const baronTotal   = baronPatente + baronTaille;
+
+  // Tranches détaillées pour la baronnie
+  const trancheRows = (() => {
+    const def = [[500, 0], [1000, 0.10], [1000, 0.15], [1500, 0.25], [Infinity, 0.35]];
+    let reste = benefice;
+    return def.map(([plafond, taux], i) => {
+      const part = Math.min(reste, plafond);
+      const imp  = Math.round(part * taux);
+      reste -= part;
+      const label = i === 0 ? '0 à 500 sept.' : i === 1 ? '501 à 1 500 sept.' :
+                    i === 2 ? '1 501 à 2 500 sept.' : i === 3 ? '2 501 à 4 000 sept.' : '4 001+ sept.';
+      return `<tr class="${part <= 0 ? 'muted' : ''}">
+        <td>Tranche ${i+1} — ${label}</td>
+        <td class="num">${part > 0 ? septims(part) : '—'}</td>
+        <td class="num muted-text">${(taux*100).toFixed(0)} %</td>
+        <td class="num">${part > 0 ? septims(imp) : '—'}</td>
+      </tr>`;
+    }).join('');
+  })();
+
+  // Commerces enregistrés
+  const taxables = DB.commerces.filter(c => taxeDue(c) > 0);
+  const totalCommerces = taxables.reduce((s, c) => s + taxeDue(c), 0);
   const taxRows = taxables.map(c => {
     const d = taxeDetail(c);
     const last = derniereTaxe(c);
     return `<tr>
-      <td><strong>${esc(c.nom)}</strong><span class="note-inline">${esc(c.secteur || '—')} · ${esc(c.proprietaire || '')}</span></td>
+      <td><strong>${esc(c.nom)}</strong><span class="note-inline">${esc(c.secteur || '—')}</span></td>
       <td class="num">${septims(c.benefice)}</td>
       <td class="num muted-text">${septims(d.patente)}</td>
       <td class="num muted-text">${septims(d.taille)}</td>
@@ -65,46 +100,58 @@ RENDERERS.impots = () => {
     </tr>`;
   }).join('');
 
-  return `${sectionHead('Impôts', 'Récapitulatif automatique des taxes dues cette semaine. Tout se calcule depuis les bénéfices des commerces et les paramètres fixes ci-dessous.')}
+  // Fixes
+  const totalCens  = censMontant() * censSujets();
+  const totalFixed = totalCens + loyerTotal();
+  const grandTotal = baronTotal + totalCommerces + totalFixed;
+
+  return `${sectionHead('Impôts', 'Récapitulatif automatique. La Taille de la baronnie est calculée en direct depuis les ventes et achats inscrits au trésor cette semaine.')}
 
   <div class="summary-strip">
-    <div><span>Taxes commerciales</span><strong>${septims(totalTaxes)}</strong></div>
-    <div><span>Cens de Sujétion (${censSujets()} sujets)</span><strong>${septims(totalCens())}</strong></div>
-    <div><span>Loyers</span><strong>${septims(loyerTotal())}</strong></div>
+    <div><span>Taille + Agrément (baronnie)</span><strong>${septims(baronTotal)}</strong></div>
+    <div><span>Taxes commerces</span><strong>${septims(totalCommerces)}</strong></div>
+    <div><span>Cens & loyers</span><strong>${septims(totalFixed)}</strong></div>
     <div class="ruled"><span>Total dû cette semaine</span><strong>${septims(grandTotal)}</strong></div>
   </div>
 
+  <!-- Baronnie -->
   <div class="sheet">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.8rem">
-      <h3 class="sheet-title" style="margin:0">Taxe commerciale — Agrément + Taille</h3>
-      ${edit && taxables.length ? `<button class="btn btn-primary" onclick="percevoirTout()">Tout percevoir (${septims(totalTaxes)})</button>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.5rem">
+      <h3 class="sheet-title" style="margin:0">Baronnie de Gardepomme — ${esc(baronnieSecteur())}</h3>
+      ${edit ? `<button class="btn btn-ghost" onclick="editParamsFiscaux()">Paramètres</button>` : ''}
     </div>
-    <p class="lead-in">Calculé depuis les bénéfices déclarés dans les Commerces. Mise à jour automatique à chaque modification.</p>
+    <p class="lead-in">Bénéfice hebdo = Ventes (${septims(ventes)}) − Achats (${septims(achats)}) = <strong>${septims(benefice)}</strong></p>
     <div class="table-wrap"><table class="ledger">
-      <thead><tr>
-        <th>Commerce</th>${th('Bénéfice','num')}${th('Agrément','num')}${th('Taille','num')}${th('Total dû','num')}
-        <th>Dernière perception</th>
-        ${edit ? '<th class="actions"><span class="sr-only">Actions</span></th>' : ''}
-      </tr></thead>
-      <tbody>${taxRows || emptyRow(7, 'Aucun commerce taxable ouvert.')}</tbody>
-      <tfoot><tr class="total">
-        <td colspan="4">Total taxes commerciales</td>
-        <td class="num">${septims(totalTaxes)}</td>
-        <td></td>${edit ? '<td></td>' : ''}
-      </tr></tfoot>
+      <thead><tr><th>Tranche</th>${th('Part imposée','num')}${th('Taux','num')}${th('Impôt','num')}</tr></thead>
+      <tbody>${trancheRows}</tbody>
+      <tfoot>
+        <tr class="subtotal"><td colspan="3">Taille</td><td class="num">${septims(baronTaille)}</td></tr>
+        <tr class="subtotal"><td colspan="3">Agrément (${esc(baronnieSecteur())})</td><td class="num">${septims(baronPatente)}</td></tr>
+        <tr class="total"><td colspan="3">Total baronnie</td><td class="num">${septims(baronTotal)}</td></tr>
+      </tfoot>
     </table></div>
   </div>
 
-  <div class="sheet">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.8rem">
-      <h3 class="sheet-title" style="margin:0">Impôts fixes (Art. II & III)</h3>
-      ${edit ? `<button class="btn btn-ghost" onclick="editParamsFiscaux()">Modifier</button>` : ''}
+  <!-- Commerces enregistrés -->
+  ${taxables.length ? `<div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.5rem">
+      <h3 class="sheet-title" style="margin:0">Commerces enregistrés</h3>
+      ${edit ? `<button class="btn btn-primary" onclick="percevoirTout()">Tout percevoir (${septims(totalCommerces)})</button>` : ''}
     </div>
-    <p class="lead-in">Montants fixes à configurer une seule fois. Le Cens de Sujétion est de ${septims(censMontant())} par sujet par semaine (Art. II).</p>
+    <div class="table-wrap"><table class="ledger">
+      <thead><tr><th>Commerce</th>${th('Bénéfice déclaré','num')}${th('Agrément','num')}${th('Taille','num')}${th('Total','num')}<th>Dernière perception</th>${edit ? '<th class="actions"><span class="sr-only">Actions</span></th>' : ''}</tr></thead>
+      <tbody>${taxRows}</tbody>
+      <tfoot><tr class="total"><td colspan="4">Total commerces</td><td class="num">${septims(totalCommerces)}</td><td></td>${edit ? '<td></td>' : ''}</tr></tfoot>
+    </table></div>
+  </div>` : ''}
+
+  <!-- Fixes -->
+  <div class="sheet">
+    <h3 class="sheet-title">Impôts fixes (Art. II & III)</h3>
     <table class="ledger">
       <thead><tr><th>Impôt</th><th>Détail</th><th class="num">Montant hebdo</th></tr></thead>
       <tbody>
-        <tr><td><strong>Cens de Sujétion</strong></td><td>${censSujets()} sujet(s) × ${septims(censMontant())}</td><td class="num">${septims(totalCens())}</td></tr>
+        <tr><td><strong>Cens de Sujétion</strong></td><td>${censSujets()} sujet(s) × ${septims(censMontant())}</td><td class="num">${septims(totalCens)}</td></tr>
         <tr><td><strong>Loyers</strong></td><td>Total des parcelles</td><td class="num">${septims(loyerTotal())}</td></tr>
       </tbody>
       <tfoot><tr class="total"><td colspan="2">Total fixe</td><td class="num">${septims(totalFixed)}</td></tr></tfoot>
@@ -114,12 +161,13 @@ RENDERERS.impots = () => {
 
 function editParamsFiscaux() {
   const fields = [
-    { key: 'cens_montant', label: 'Montant du Cens de Sujétion (par sujet)', type: 'number', default: 45, hint: 'Art. II — 45 sept. par semaine.' },
-    { key: 'cens_sujets', label: 'Nombre de sujets assujettis', type: 'number', default: 0 },
-    { key: 'loyer_total', label: 'Total des loyers hebdomadaires', type: 'number', default: 0, hint: 'Art. III — somme de toutes les parcelles.' },
+    { key: 'baronnie_secteur', label: 'Secteur de la baronnie (Agrément)', type: 'select', options: SECTEURS_LISTE },
+    { key: 'cens_montant', label: 'Cens de Sujétion (par sujet)', type: 'number', hint: 'Art. II — 45 sept. par semaine.' },
+    { key: 'cens_sujets', label: 'Nombre de sujets assujettis', type: 'number' },
+    { key: 'loyer_total', label: 'Total des loyers hebdomadaires', type: 'number', hint: 'Art. III.' },
   ];
   openModal({
-    title: 'Paramètres fiscaux fixes',
+    title: 'Paramètres fiscaux',
     body: renderFields(fields, DB.params),
     okLabel: 'Enregistrer',
     onOk: async () => {
