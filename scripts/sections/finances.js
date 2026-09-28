@@ -8,12 +8,18 @@ const OP_CATEGORIES_TOUTES = ['Vente', 'Achat', 'Amende', 'Salaires', 'Impôts',
 
 const OP_FIELDS = [
   { key: 'date_op', label: 'Date', type: 'date', required: true, default: today() },
-  { key: 'sens', label: 'Sens', type: 'select', options: ['Recette', 'Dépense'] },
   { key: 'categorie', label: 'Catégorie', type: 'select', options: OP_CATEGORIES_MANUEL },
   { key: 'montant', label: 'Montant (septims)', type: 'number', required: true },
   { key: 'libelle', label: 'Libellé', required: true, full: true },
   { key: 'details', label: 'Détails', type: 'textarea', rows: 2 },
 ];
+
+// Déduit le sens depuis la catégorie
+function sensFromCategorie(cat) {
+  if (cat === 'Vente') return 'Recette';
+  if (cat === 'Achat') return 'Dépense';
+  return null; // Amende : déterminé par l'utilisateur via le libellé, on demande
+}
 
 function signed(o) { return o.sens === 'Recette' ? num(o.montant) : -num(o.montant); }
 function soldeTresor() { return DB.operations.reduce((s, o) => s + signed(o), 0); }
@@ -277,8 +283,44 @@ function filterOps() {
 }
 function editOp(id) {
   const row = id ? DB.operations.find(o => o.id === id) : null;
-  openEditor({ table: 'gp_operations', section: 'finances', title: 'opération', fields: OP_FIELDS, row,
-    transform: d => ({ ...d, auteur: currentAuthor() }), after: reload });
+  openEditor({
+    table: 'gp_operations', section: 'finances', title: 'opération', fields: OP_FIELDS, row,
+    transform: d => {
+      const cat = d.categorie;
+      let sens = sensFromCategorie(cat);
+      if (!sens) {
+        // Amende : on demande le sens via un champ caché qu'on ajoute dynamiquement
+        const el = document.getElementById('f-amende-sens');
+        sens = el ? el.value : 'Recette';
+      }
+      return { ...d, sens, auteur: currentAuthor() };
+    },
+    after: reload,
+    onBodyReady: () => injectAmendeSens(row?.sens),
+  });
+}
+
+function injectAmendeSens(currentSens) {
+  const catEl = document.getElementById('f-categorie');
+  if (!catEl) return;
+  catEl.addEventListener('change', () => toggleAmendeSens(catEl.value));
+  toggleAmendeSens(catEl.value, currentSens);
+}
+
+function toggleAmendeSens(cat, currentSens) {
+  const existing = document.getElementById('amende-sens-wrap');
+  if (cat !== 'Amende') { if (existing) existing.remove(); return; }
+  if (existing) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'amende-sens-wrap';
+  wrap.className = 'field';
+  wrap.innerHTML = `<label for="f-amende-sens">Sens de l'amende</label>
+    <select id="f-amende-sens">
+      <option value="Recette"${currentSens !== 'Dépense' ? ' selected' : ''}>Reçue (Recette)</option>
+      <option value="Dépense"${currentSens === 'Dépense' ? ' selected' : ''}>Payée (Dépense)</option>
+    </select>`;
+  const grid = document.querySelector('#modal-body .form-grid');
+  if (grid) grid.insertBefore(wrap, grid.children[1]);
 }
 function delOp(id) {
   const o = DB.operations.find(x => x.id === id);

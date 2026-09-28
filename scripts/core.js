@@ -202,7 +202,7 @@ function readFields(fields) {
 }
 
 // Ouvre le formulaire d'ajout / modification d'une entrée
-function openEditor({ table, section, title, fields, row, after, transform }) {
+function openEditor({ table, section, title, fields, row, after, transform, onBodyReady }) {
   if (!canEdit(section)) return toast("Ton compte n'a pas le droit de modifier cette section.", 'err');
   openModal({
     title: (row ? 'Modifier — ' : 'Ajouter — ') + title,
@@ -217,6 +217,7 @@ function openEditor({ table, section, title, fields, row, after, transform }) {
       if (after) await after();
     },
   });
+  if (onBodyReady) setTimeout(onBodyReady, 10);
 }
 
 async function removeRow({ table, section, id, label, after }) {
