@@ -22,7 +22,7 @@ RENDERERS.recettes = () => {
         <ol>${DB.recettes.filter(r => r.categorie === c).map(r => `
           <li data-s="${esc(norm(r.nom))}">
             <button class="codex-link${r.id === recetteSelected ? ' active' : ''}" onclick="openRecette('${r.id}')">
-              ${esc(r.nom)}${r.rendement ? `<span class="ref">→ ${esc(r.rendement)}</span>` : ''}
+              ${esc(r.nom)}
             </button></li>`).join('')}</ol>
       </div>`).join('')
     : `<p class="muted-text" style="padding:.5rem">${edit ? 'Aucune recette. Ajoute-en une.' : 'Aucune recette.'}</p>`;
@@ -31,7 +31,7 @@ RENDERERS.recettes = () => {
   const ings = Array.isArray(r?.ingredients) ? r.ingredients : [];
 
   const detail = r ? `<article class="codex-page">
-    <p class="codex-recueil">${esc(r.categorie)}${r.rendement ? ` — ${esc(r.rendement)}` : ''}</p>
+    <p class="codex-recueil">${esc(r.categorie)}</p>
     <h3>${esc(r.nom)}</h3>
     <table class="ledger ing-view">
       <thead><tr><th>Ingrédient</th><th class="num">Quantité</th><th>Unité</th></tr></thead>
@@ -155,8 +155,6 @@ function editRecette(id) {
       <div class="field"><label for="r-nom">Nom <span class="req">*</span></label><input id="r-nom" value="${esc(row?.nom || '')}"></div>
       <div class="field"><label for="r-cat">Catégorie</label>
         <select id="r-cat">${RECETTE_CATEGORIES.map(c => `<option${c === (row?.categorie || 'Alimentation') ? ' selected' : ''}>${c}</option>`).join('')}</select></div>
-      <div class="field"><label for="r-rend">Rendement</label><input id="r-rend" placeholder="ex : 1 tonneau, 20 portions" value="${esc(row?.rendement || '')}"></div>
-      <div class="field"><label for="r-ordre">Ordre</label><input id="r-ordre" type="number" value="${num(row?.ordre ?? 100)}"></div>
       <div class="field full"><label for="r-notes">Notes</label><textarea id="r-notes" rows="2">${esc(row?.notes || '')}</textarea></div>
     </div>
     <h4 style="margin:.9rem 0 .5rem;font-family:var(--font-sc)">Ingrédients</h4>
@@ -170,8 +168,6 @@ function editRecette(id) {
       const data = {
         nom,
         categorie: document.getElementById('r-cat').value,
-        rendement: document.getElementById('r-rend').value.trim() || null,
-        ordre: Math.round(num(document.getElementById('r-ordre').value)) || 100,
         notes: document.getElementById('r-notes').value.trim() || null,
         ingredients: _ings.filter(i => i.nom.trim()),
       };
