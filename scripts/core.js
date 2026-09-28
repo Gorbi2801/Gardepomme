@@ -13,6 +13,7 @@ const SECTIONS = {
   codex:     { label: 'Codex', editable: true },
   finances:  { label: 'Trésor', editable: true },
   impots:    { label: 'Impôts', editable: true },
+  recettes:  { label: 'Recettes', editable: true },
   journal:   { label: 'Historique' },
 };
 
@@ -36,7 +37,7 @@ const TABLE_LABEL = {
 
 // Données en mémoire, rechargées par section
 const DB = {
-  membres: [], commerces: [], lois: [], operations: [], impots: [],
+  membres: [], commerces: [], lois: [], operations: [], impots: [], recettes: [],
   params: { taux_taxe_commerce: '10', periode_label: 'semaine' },
 };
 
