@@ -365,3 +365,16 @@ body.is-loading .loading-bar { width: 70%; transition: width 4s cubic-bezier(.1,
 }
 .setup-card h2 { font-family:var(--font-sc); font-weight:700; font-size:1.7rem; margin-bottom:.5rem; }
 .setup-card .lead-in { color:var(--encre-2); margin-bottom:1.4rem; }
+
+/* ── Case à cocher salaire payé ───────────────────────────────────── */
+.salaire-check { width: 18px; height: 18px; cursor: pointer; accent-color: var(--verger); }
+.salaire-check:disabled { cursor: default; opacity: .5; }
+td.center { text-align: center; vertical-align: middle; }
+th.center { text-align: center; }
+
+/* ── Éditeur d'ingrédients (modale recette) ───────────────────────── */
+.ing-row { display:flex; gap:.5rem; align-items:center; margin-bottom:.4rem; }
+.ing-nom { flex:1; min-width:120px; padding:.4rem .5rem; border:1px solid #BFC7B6; border-radius:var(--radius); }
+.ing-qte { width:80px; padding:.4rem .5rem; border:1px solid #BFC7B6; border-radius:var(--radius); text-align:right; }
+.ing-unite { width:100px; padding:.4rem .5rem; border:1px solid #BFC7B6; border-radius:var(--radius); }
+.ing-view td:first-child { font-weight:500; }
