@@ -4,7 +4,7 @@
 const RENDERERS = {};   // section → fonction de rendu (remplies par chaque module)
 
 async function loadData() {
-  const [membres, commerces, lois, operations, impots, recettes, semaines, params] = await Promise.all([
+  const [membres, commerces, lois, operations, impots, recettes, semaines, agrements, params] = await Promise.all([
     apiList('gp_membres', 'prenom'),
     apiList('gp_commerces', 'nom'),
     apiList('gp_lois', 'ordre'),
@@ -12,9 +12,10 @@ async function loadData() {
     apiList('gp_impots', 'echeance'),
     apiList('gp_recettes', 'ordre'),
     apiList('gp_semaines', 'date_debut', false),
+    apiList('gp_agrements', 'created_at'),
     apiList('gp_parametres', 'cle'),
   ]);
-  Object.assign(DB, { membres, commerces, lois, operations, impots, recettes, semaines });
+  Object.assign(DB, { membres, commerces, lois, operations, impots, recettes, semaines, agrements });
   params.forEach(p => { DB.params[p.cle] = p.valeur; });
 }
 
