@@ -52,7 +52,7 @@ function esc(v) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
-function septims(v) { return num(v).toLocaleString('fr-FR') + ' sept.'; }
+function septims(v) { const n = num(v); return (Number.isInteger(n) ? n : n.toFixed(2)).toLocaleString('fr-FR') + ' sept.'; }
 function septimsSigned(v) { const n = num(v); return (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n).toLocaleString('fr-FR') + ' sept.'; }
 function today() { return new Date().toISOString().slice(0, 10); }
 function fmtDate(d) {
@@ -182,7 +182,7 @@ function renderFields(fields, row = {}) {
     } else if (f.type === 'datalist') {
       input = `<input id="${id}" list="${id}-dl" value="${esc(v)}"${req}><datalist id="${id}-dl">${f.options.map(o => `<option value="${esc(o)}">`).join('')}</datalist>`;
     } else {
-      const extra = f.type === 'number' ? ' min="0" step="1" inputmode="numeric"' : '';
+      const extra = f.type === 'number' ? ` min="0" step="${f.float ? '0.01' : '1'}" inputmode="${f.float ? 'decimal' : 'numeric'}"` : '';
       input = `<input id="${id}" type="${f.type || 'text'}" value="${esc(v)}"${extra}${req}>`;
     }
     return `<div class="field${f.full || f.type === 'textarea' ? ' full' : ''}">${label}${input}${hint}</div>`;
@@ -194,7 +194,7 @@ function readFields(fields) {
     const el = document.getElementById('f-' + f.key);
     if (!el) continue;
     let v = f.type === 'checkbox' ? el.checked : el.value.trim();
-    if (f.type === 'number') v = v === '' ? 0 : Math.round(num(v));
+    if (f.type === 'number') v = v === '' ? 0 : (f.float ? Math.round(parseFloat(v) * 100) / 100 : Math.round(num(v)));
     if (f.type === 'date' && v === '') v = null;
     if (f.required && (v === '' || v === null)) throw new Error(`Le champ « ${f.label} » est obligatoire.`);
     if (typeof v === 'string' && v === '' && !f.required) v = null;

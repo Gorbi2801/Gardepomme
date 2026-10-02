@@ -171,8 +171,8 @@ function editArticle(id) {
     { key: 'nom', label: 'Nom de l\'article', required: true },
     { key: 'categorie', label: 'Catégorie', type: 'datalist', options: CAT_CATEGORIES },
     { key: 'unite', label: 'Unité', type: 'datalist', options: CAT_UNITES, default: 'unité' },
-    { key: 'prix_vente', label: 'Prix de vente (septims)', type: 'number', hint: 'Ce que la baronnie vend cet article.' },
-    { key: 'prix_achat', label: 'Prix d\'achat / rachat (septims)', type: 'number', hint: 'Ce que la baronnie paie ou rembourse pour cet article.' },
+    { key: 'prix_vente', label: 'Prix de vente (septims)', type: 'number', float: true, hint: 'Ce que la baronnie vend cet article.' },
+    { key: 'prix_achat', label: 'Prix d\'achat / rachat (septims)', type: 'number', float: true, hint: 'Ce que la baronnie paie ou rembourse pour cet article.' },
     { key: 'notes', label: 'Notes', type: 'textarea', rows: 2, full: true },
   ];
 
