@@ -2,7 +2,7 @@
 //  CATALOGUE — prix de vente et d'achat/rachat des articles,
 //              avec lien optionnel vers un contrat existant.
 // ══════════════════════════════════════════════════════════════════════
-const CAT_CATEGORIES = ['Fruits & Légumes', 'Plats cuisinés', 'Recettes de Cyrodiil', 'Bois & Charbon', 'Bétail', 'Matières premières', 'Autre'];
+const CAT_CATEGORIES = ['Fruits & Légumes', 'Viandes', 'Ingrédients', 'Plats cuisinés', 'Recettes de Cyrodiil', 'Bois & Charbon', 'Bétail', 'Matières premières', 'Autre'];
 const CATALOGUE_TABS = ['liste', 'compterendu'];
 let catTab = 'liste';
 const CAT_UNITES     = ['unité', 'pièce', 'kg', 'L', 'tonneau', 'caisse', 'botte', 'sac', 'lot'];
