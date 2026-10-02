@@ -378,3 +378,11 @@ th.center { text-align: center; }
 .ing-qte { width:80px; padding:.4rem .5rem; border:1px solid #BFC7B6; border-radius:var(--radius); text-align:right; }
 .ing-unite { width:100px; padding:.4rem .5rem; border:1px solid #BFC7B6; border-radius:var(--radius); }
 .ing-view td:first-child { font-weight:500; }
+
+/* ── Compte rendu catalogue ───────────────────────────────────────── */
+.cr-sheet { }
+.cr-group { margin-bottom: 1.4rem; }
+.cr-group h3 { font-family: var(--font-sc); font-weight: 700; font-size: 1.1rem;
+  color: var(--verger); border-bottom: 2px solid var(--encre); padding-bottom: .25rem; margin-bottom: .5rem; }
+.cr-table { width: 100%; }
+.cr-table td, .cr-table th { padding: .4rem .6rem; }

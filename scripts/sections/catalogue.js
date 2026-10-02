@@ -2,7 +2,9 @@
 //  CATALOGUE — prix de vente et d'achat/rachat des articles,
 //              avec lien optionnel vers un contrat existant.
 // ══════════════════════════════════════════════════════════════════════
-const CAT_CATEGORIES = ['Nourriture', 'Boissons', 'Bois & Charbon', 'Bétail', 'Matières premières', 'Autre'];
+const CAT_CATEGORIES = ['Fruits & Légumes', 'Plats cuisinés', 'Recettes de Cyrodiil', 'Bois & Charbon', 'Bétail', 'Matières premières', 'Autre'];
+const CATALOGUE_TABS = ['liste', 'compterendu'];
+let catTab = 'liste';
 const CAT_UNITES     = ['unité', 'pièce', 'kg', 'L', 'tonneau', 'caisse', 'botte', 'sac', 'lot'];
 
 RENDERERS.catalogue = () => {
@@ -33,7 +35,13 @@ RENDERERS.catalogue = () => {
   const totalVente = DB.catalogue.filter(a => num(a.prix_vente) > 0).length;
   const totalAchat = DB.catalogue.filter(a => num(a.prix_achat) > 0).length;
 
+  const tabs = [['liste','Liste des articles'],['compterendu','Compte rendu des prix']];
   return `${sectionHead('Catalogue', 'Prix de vente et d\'achat/rachat des articles de la baronnie. Un article peut être lié à un contrat existant.')}
+  <div class="tabs" role="tablist">
+    ${tabs.map(([k,l]) => `<button role="tab" aria-selected="${k===catTab}" class="tab${k===catTab?' active':''}" onclick="catSetTab('${k}')">${l}</button>`).join('')}
+  </div>
+  ${catTab === 'compterendu' ? renderCompteRendu() : ''}
+  <div${catTab === 'compterendu' ? ' hidden' : ''}>
   <div class="summary-strip">
     <div><span>Articles référencés</span><strong>${DB.catalogue.length}</strong></div>
     <div><span>Avec prix de vente</span><strong>${totalVente}</strong></div>
@@ -54,8 +62,102 @@ RENDERERS.catalogue = () => {
       <tbody id="cat-tbody">${rows || emptyRow(7, edit ? 'Aucun article. Ajoutes-en un.' : 'Aucun article référencé.')}</tbody>
     </table></div>
   </div>
+  </div>
   ${sectionHistory(['gp_catalogue'])}`;
 };
+
+function catSetTab(k) { catTab = k; renderActive(); }
+
+function renderCompteRendu() {
+  const cats = CAT_CATEGORIES.filter(cat =>
+    DB.catalogue.some(a => a.categorie === cat)
+  );
+  // Autres : articles sans catégorie reconnue
+  const autresItems = DB.catalogue.filter(a =>
+    !CAT_CATEGORIES.includes(a.categorie) || a.categorie === 'Autre'
+  );
+
+  const renderCat = (label, items) => {
+    if (!items.length) return '';
+    return `<div class="cr-group">
+      <h3>${esc(label)}</h3>
+      <table class="ledger cr-table">
+        <thead><tr><th>Article</th><th>Unité</th><th class="num">Prix de vente</th><th class="num">Prix d'achat</th></tr></thead>
+        <tbody>${items.map(a => `<tr>
+          <td>${esc(a.nom)}</td>
+          <td class="muted-text">${esc(a.unite || 'unité')}</td>
+          <td class="num in">${num(a.prix_vente) > 0 ? septims(a.prix_vente) : '<span class="muted-text">—</span>'}</td>
+          <td class="num out">${num(a.prix_achat) > 0 ? septims(a.prix_achat) : '<span class="muted-text">—</span>'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  };
+
+  const grouped = cats
+    .filter(cat => cat !== 'Autre')
+    .map(cat => renderCat(cat, DB.catalogue.filter(a => a.categorie === cat)))
+    .join('');
+
+  const autres = renderCat('Autre', autresItems);
+
+  if (!DB.catalogue.length) {
+    return `<div class="sheet"><p class="muted-text">Aucun article dans le catalogue.</p></div>`;
+  }
+
+  return `<div class="sheet cr-sheet">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+      <h3 class="sheet-title" style="margin:0">Liste des prix — Baronnie de Gardepomme</h3>
+      <button class="btn btn-ghost" onclick="exportCompteRendu()">Exporter .txt</button>
+    </div>
+    ${grouped}${autres}
+  </div>`;
+}
+
+function exportCompteRendu() {
+  const sep  = '═'.repeat(46);
+  const line = '─'.repeat(46);
+  const pad  = (s, n) => String(s).padEnd(n);
+  const padR = (s, n) => String(s).padStart(n);
+
+  let txt = `${sep}
+  BARONNIE DE GARDEPOMME — Liste des prix
+${sep}
+
+`;
+
+  const cats = CAT_CATEGORIES.filter(cat =>
+    DB.catalogue.some(a => a.categorie === cat) && cat !== 'Autre'
+  );
+  const autresItems = DB.catalogue.filter(a =>
+    !CAT_CATEGORIES.includes(a.categorie) || a.categorie === 'Autre'
+  );
+
+  const renderSection = (label, items) => {
+    if (!items.length) return '';
+    let s = `${label.toUpperCase()}
+${line}
+`;
+    for (const a of items) {
+      const vente = num(a.prix_vente) > 0 ? padR(num(a.prix_vente).toLocaleString('fr-FR') + ' sept.', 14) : padR('—', 14);
+      const achat = num(a.prix_achat) > 0 ? padR(num(a.prix_achat).toLocaleString('fr-FR') + ' sept.', 14) : padR('—', 14);
+      s += '  ' + pad(a.nom, 22) + ' Vente ' + vente + '  Achat ' + achat + '\n';
+    }
+    return s + '\n';
+  }
+
+  for (const cat of cats) {
+    txt += renderSection(cat, DB.catalogue.filter(a => a.categorie === cat));
+  }
+  if (autresItems.length) txt += renderSection('Autre', autresItems);
+  txt += `${sep}
+`;
+
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain;charset=utf-8' }));
+  a.download = 'catalogue_gardepomme.txt';
+  a.click();
+  toast('Compte rendu exporté.');
+}
 
 function filterCatalogue() {
   filterTable('cat-tbody', 'cat-q', { cat: document.getElementById('cat-fil').value });
