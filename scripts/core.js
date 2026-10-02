@@ -14,6 +14,7 @@ const SECTIONS = {
   finances:  { label: 'Trésor', editable: true },
   impots:    { label: 'Impôts', editable: true },
   contrats:  { label: 'Contrats', editable: true },
+  catalogue: { label: 'Catalogue', editable: true },
   recettes:  { label: 'Recettes', editable: true },
   journal:   { label: 'Historique' },
 };
@@ -38,7 +39,7 @@ const TABLE_LABEL = {
 
 // Données en mémoire, rechargées par section
 const DB = {
-  membres: [], commerces: [], lois: [], operations: [], impots: [], recettes: [], semaines: [], agrements: [], contrats: [],
+  membres: [], commerces: [], lois: [], operations: [], impots: [], recettes: [], semaines: [], agrements: [], contrats: [], catalogue: [],
   params: { taux_taxe_commerce: '10', periode_label: 'semaine' },
 };
 
