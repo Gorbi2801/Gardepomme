@@ -169,6 +169,22 @@ RENDERERS.impots = () => {
     </table></div>
   </div>` : ''}
 
+  <!-- Total général -->
+  <div class="sheet" style="border-top:3px double var(--encre)">
+    <table class="ledger">
+      <tbody>
+        <tr class="subtotal"><td>Taille (baronnie)</td><td class="num">${septims(baronTaille)}</td></tr>
+        <tr class="subtotal"><td>Agréments actifs (${agrActifs.length})</td><td class="num">${septims(totalAgrement)}</td></tr>
+        ${totalCommerces ? `<tr class="subtotal"><td>Taxes commerces</td><td class="num">${septims(totalCommerces)}</td></tr>` : ''}
+        <tr class="subtotal"><td>Cens de Sujétion</td><td class="num">${septims(totalCens)}</td></tr>
+        <tr class="subtotal"><td>Loyers</td><td class="num">${septims(loyerTotal())}</td></tr>
+      </tbody>
+      <tfoot>
+        <tr class="total"><td><strong>Total des impôts de la semaine</strong></td><td class="num"><strong>${septims(grandTotal)}</strong></td></tr>
+      </tfoot>
+    </table>
+  </div>
+
   <!-- Fixes -->
   <div class="sheet">
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.5rem">
