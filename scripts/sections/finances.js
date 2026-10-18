@@ -83,7 +83,6 @@ RENDERERS.finances = () => {
 
   return `${sectionHead('Trésor de la baronnie', 'Les recettes et dépenses. Vue par défaut : semaine courante (lundi–dimanche).')}
   <div class="summary-strip">
-    <div class="ruled"><span>Solde cumulé</span><strong class="${solde < 0 ? 'out' : ''}">${septims(solde)}</strong></div>
     <div><span>Recettes (période)</span><strong class="in">${septims(rec7)}</strong></div>
     <div><span>Dépenses (période)</span><strong class="out">${septims(dep7)}</strong></div>
     <div><span>Résultat (période)</span><strong class="${rec7-dep7 >= 0 ? 'in' : 'out'}">${septimsSigned(rec7 - dep7)}</strong></div>

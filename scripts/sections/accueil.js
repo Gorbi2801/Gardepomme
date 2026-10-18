@@ -30,11 +30,6 @@ RENDERERS.accueil = () => {
       <h2>Baronnie de Gardepomme</h2>
       <p>Vassale du Comté de Bruma. Registres tenus au nom du Baron.</p>
     </div>
-    <div class="hero-balance ${solde < 0 ? 'neg' : ''}">
-      <span>Trésor de la baronnie</span>
-      <strong>${septims(solde)}</strong>
-      <em>${septimsSigned(rec7 - dep7)} sur les 7 derniers jours</em>
-    </div>
   </section>
 
   ${alerts.length ? `<ul class="alerts">${alerts.join('')}</ul>` : ''}
