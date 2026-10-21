@@ -33,12 +33,14 @@ function prestatairesActifs() { return DB.membres.filter(m => estPrestataire(m) 
 function masseSalariale() { return membresPayes().reduce((s, m) => s + num(m.salaire), 0); }
 
 // ── Paiements hebdomadaires stockés en localStorage ──────────────────
-// (contournement du cache de schéma PostgREST pour salaire_paye)
+// Format : { [memberId]: operationId } — permet d'annuler en décochant
 const GP_SALAIRES_KEY = 'gp_salaires_current';
-function getSalairesPayes()     { try { return new Set(JSON.parse(localStorage.getItem(GP_SALAIRES_KEY) || '[]')); } catch { return new Set(); } }
-function setSalairePaye(id, v)  { const s = getSalairesPayes(); v ? s.add(id) : s.delete(id); try { localStorage.setItem(GP_SALAIRES_KEY, JSON.stringify([...s])); } catch {} }
-function clearSalairesPayes()   { try { localStorage.removeItem(GP_SALAIRES_KEY); } catch {} }
-function estPaye(m)             { return getSalairesPayes().has(m.id); }
+function getSalairesMap()          { try { return JSON.parse(localStorage.getItem(GP_SALAIRES_KEY) || '{}'); } catch { return {}; } }
+function estPaye(m)                { return m.id in getSalairesMap(); }
+function getOpId(memberId)         { return getSalairesMap()[memberId] || null; }
+function setSalairePaye(mId, opId) { const s = getSalairesMap(); s[mId] = opId; try { localStorage.setItem(GP_SALAIRES_KEY, JSON.stringify(s)); } catch {} }
+function clearSalairePaye(mId)     { const s = getSalairesMap(); delete s[mId]; try { localStorage.setItem(GP_SALAIRES_KEY, JSON.stringify(s)); } catch {} }
+function clearSalairesPayes()      { try { localStorage.removeItem(GP_SALAIRES_KEY); } catch {} }
 
 function masseRestante()  { return membresPayes().filter(m => !estPaye(m)).reduce((s, m) => s + num(m.salaire), 0); }
 
@@ -67,8 +69,8 @@ RENDERERS.effectifs = () => {
           : '<span class="muted-text">À la livraison</span>')
       : (num(m.salaire) > 0 && m.statut === 'Actif'
           ? `<input type="checkbox" class="salaire-check" aria-label="Salaire payé"
-               ${estPaye(m) ? 'checked disabled' : ''}
-               ${canEdit('effectifs') && !estPaye(m) ? `onchange="togglePaiement('${m.id}', this.checked)"` : 'disabled'}>`
+               ${estPaye(m) ? 'checked' : ''}
+               ${canEdit('effectifs') ? `onchange="togglePaiement('${m.id}', this.checked)"` : 'disabled'}>`
           : '<span class="muted-text">—</span>');
 
     return `<tr data-s="${esc(norm([fullName(m), m.fonction, m.categorie, m.race, m.notes].join(' ')))}"
@@ -181,30 +183,50 @@ function payerPrestataire(id) {
 
 // ── Employés : paie hebdomadaire ─────────────────────────────────────
 function togglePaiement(id, paye) {
-  renderActive(); // réinitialise visuellement la checkbox avant confirmation
-  if (!paye) return;
+  renderActive(); // réinitialise l'état visuel avant la modale
   const m = DB.membres.find(x => x.id === id);
   if (!m) return;
-  openModal({
-    title: `Payer ${fullName(m)}`,
-    body: `<p class="modal-text">Versement du salaire hebdomadaire — sera inscrit au trésor.</p>
-      <div class="form-grid">
-        <div class="field"><label for="tp-date">Date</label><input id="tp-date" type="date" value="${today()}"></div>
-        <div class="field"><label for="tp-lib">Libellé</label><input id="tp-lib" value="Salaire — ${esc(fullName(m))}"></div>
-      </div>`,
-    okLabel: `Verser ${septims(num(m.salaire))}`,
-    onOk: async () => {
-      await apiInsert('gp_operations', {
-        date_op: document.getElementById('tp-date').value || today(),
-        sens: 'Dépense', categorie: 'Salaires', auteur: currentAuthor(),
-        libelle: document.getElementById('tp-lib').value.trim() || `Salaire — ${fullName(m)}`,
-        montant: num(m.salaire), details: null,
-      });
-      setSalairePaye(id, true);
-      toast(`${septims(num(m.salaire))} versés à ${fullName(m)} — inscrit au trésor.`);
-      await reload();
-    },
-  });
+
+  if (paye) {
+    // ── Cocher : insère la dépense au trésor ──
+    openModal({
+      title: `Payer ${fullName(m)}`,
+      body: `<p class="modal-text">Versement du salaire hebdomadaire — sera inscrit au trésor.</p>
+        <div class="form-grid">
+          <div class="field"><label for="tp-date">Date</label><input id="tp-date" type="date" value="${today()}"></div>
+          <div class="field"><label for="tp-lib">Libellé</label><input id="tp-lib" value="Salaire — ${esc(fullName(m))}"></div>
+        </div>`,
+      okLabel: `Verser ${septims(num(m.salaire))}`,
+      onOk: async () => {
+        const op = await apiInsert('gp_operations', {
+          date_op: document.getElementById('tp-date').value || today(),
+          sens: 'Dépense', categorie: 'Salaires', auteur: currentAuthor(),
+          libelle: document.getElementById('tp-lib').value.trim() || `Salaire — ${fullName(m)}`,
+          montant: num(m.salaire), details: null,
+        });
+        setSalairePaye(id, op?.id || null);
+        toast(`${septims(num(m.salaire))} versés à ${fullName(m)} — inscrit au trésor.`);
+        await reload();
+      },
+    });
+  } else {
+    // ── Décocher : supprime l'opération correspondante ──
+    const opId = getOpId(id);
+    openModal({
+      title: `Annuler le paiement de ${fullName(m)}`,
+      body: `<p class="modal-text">La dépense de <strong>${septims(num(m.salaire))}</strong> sera retirée du trésor.</p>`,
+      okLabel: 'Annuler le paiement',
+      onOk: async () => {
+        if (opId) {
+          const { error } = await sb.from('gp_operations').delete().eq('id', opId);
+          if (error) throw error;
+        }
+        clearSalairePaye(id);
+        toast(`Paiement de ${fullName(m)} annulé.`);
+        await reload();
+      },
+    });
+  }
 }
 
 async function resetPaiements() {
@@ -233,11 +255,11 @@ function verserPaie() {
       const dateOp = document.getElementById('paie-date').value || today();
       const lib    = document.getElementById('paie-lib').value.trim() || 'Paie des effectifs';
       for (const m of payes) {
-        await apiInsert('gp_operations', {
+        const op = await apiInsert('gp_operations', {
           date_op: dateOp, sens: 'Dépense', categorie: 'Salaires', auteur: currentAuthor(),
           libelle: `${lib} — ${fullName(m)}`, montant: num(m.salaire), details: null,
         });
-        setSalairePaye(m.id, true);
+        setSalairePaye(m.id, op?.id || null);
       }
       toast(`Paie de ${septims(total)} inscrite. Employés marqués payés.`);
       await reload();
