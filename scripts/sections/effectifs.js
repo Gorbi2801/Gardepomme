@@ -171,9 +171,20 @@ function payerPrestataire(id) {
 }
 
 // ── Employés : paie hebdomadaire ─────────────────────────────────────
+// Passe par sb.rpc() pour contourner le cache de schéma PostgREST.
+// SQL à exécuter une seule fois dans Supabase SQL Editor :
+//   CREATE OR REPLACE FUNCTION public.toggle_salaire_paye(membre_id uuid, paye boolean)
+//   RETURNS void LANGUAGE sql SECURITY DEFINER AS $$
+//     UPDATE public.gp_membres SET salaire_paye = paye WHERE id = membre_id;
+//   $$;
+//   CREATE OR REPLACE FUNCTION public.reset_salaires_payes()
+//   RETURNS void LANGUAGE sql SECURITY DEFINER AS $$
+//     UPDATE public.gp_membres SET salaire_paye = false;
+//   $$;
 async function togglePaiement(id, paye) {
   try {
-    await apiUpdate('gp_membres', id, { salaire_paye: paye });
+    const { error } = await sb.rpc('toggle_salaire_paye', { membre_id: id, paye });
+    if (error) throw error;
     const m = DB.membres.find(x => x.id === id);
     if (m) m.salaire_paye = paye;
     renderActive();
@@ -183,9 +194,8 @@ async function togglePaiement(id, paye) {
 async function resetPaiements() {
   if (!await confirmBox('Remettre tous les salaires à "Non payé" pour une nouvelle période ?', 'Nouvelle période')) return;
   try {
-    for (const m of DB.membres.filter(x => x.salaire_paye)) {
-      await apiUpdate('gp_membres', m.id, { salaire_paye: false });
-    }
+    const { error } = await sb.rpc('reset_salaires_payes');
+    if (error) throw error;
     toast('Paiements réinitialisés.');
     await reload();
   } catch (e) { toast(errMsg(e), 'err'); }
@@ -213,7 +223,10 @@ function verserPaie() {
         libelle: document.getElementById('paie-lib').value.trim() || 'Paie des effectifs',
         montant: total, details: lignes.join('\n'),
       });
-      for (const m of payes) await apiUpdate('gp_membres', m.id, { salaire_paye: true });
+      for (const m of payes) {
+        const { error: ep } = await sb.rpc('toggle_salaire_paye', { membre_id: m.id, paye: true });
+        if (ep) throw ep;
+      }
       toast(`Paie de ${septims(total)} inscrite. Employés marqués payés.`);
       await reload();
     },
