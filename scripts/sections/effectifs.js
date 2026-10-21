@@ -31,7 +31,16 @@ function estPrestataire(m){ return m.type_membre === 'Prestataire'; }
 function membresPayes()   { return DB.membres.filter(m => estEmploye(m) && m.statut === 'Actif' && num(m.salaire) > 0); }
 function prestatairesActifs() { return DB.membres.filter(m => estPrestataire(m) && m.statut !== 'Congédié'); }
 function masseSalariale() { return membresPayes().reduce((s, m) => s + num(m.salaire), 0); }
-function masseRestante()  { return membresPayes().filter(m => !m.salaire_paye).reduce((s, m) => s + num(m.salaire), 0); }
+
+// ── Paiements hebdomadaires stockés en localStorage ──────────────────
+// (contournement du cache de schéma PostgREST pour salaire_paye)
+const GP_SALAIRES_KEY = 'gp_salaires_current';
+function getSalairesPayes()     { try { return new Set(JSON.parse(localStorage.getItem(GP_SALAIRES_KEY) || '[]')); } catch { return new Set(); } }
+function setSalairePaye(id, v)  { const s = getSalairesPayes(); v ? s.add(id) : s.delete(id); try { localStorage.setItem(GP_SALAIRES_KEY, JSON.stringify([...s])); } catch {} }
+function clearSalairesPayes()   { try { localStorage.removeItem(GP_SALAIRES_KEY); } catch {} }
+function estPaye(m)             { return getSalairesPayes().has(m.id); }
+
+function masseRestante()  { return membresPayes().filter(m => !estPaye(m)).reduce((s, m) => s + num(m.salaire), 0); }
 
 RENDERERS.effectifs = () => {
   const edit = canEdit('effectifs');
@@ -58,8 +67,8 @@ RENDERERS.effectifs = () => {
           : '<span class="muted-text">À la livraison</span>')
       : (num(m.salaire) > 0 && m.statut === 'Actif'
           ? `<input type="checkbox" class="salaire-check" aria-label="Salaire payé"
-               ${m.salaire_paye ? 'checked' : ''}
-               ${canEdit('effectifs') ? `onchange="togglePaiement('${m.id}', this.checked)"` : 'disabled'}>`
+               ${estPaye(m) ? 'checked disabled' : ''}
+               ${canEdit('effectifs') && !estPaye(m) ? `onchange="togglePaiement('${m.id}', this.checked)"` : 'disabled'}>`
           : '<span class="muted-text">—</span>');
 
     return `<tr data-s="${esc(norm([fullName(m), m.fonction, m.categorie, m.race, m.notes].join(' ')))}"
@@ -91,7 +100,7 @@ RENDERERS.effectifs = () => {
   </div>
 
   ${edit ? `<div class="callout">
-    <p>Prochaine paie employés : <strong>${septims(masseRestante())}</strong> pour ${membresPayes().filter(m => !m.salaire_paye).length} personne(s).
+    <p>Prochaine paie employés : <strong>${septims(masseRestante())}</strong> pour ${membresPayes().filter(m => !estPaye(m)).length} personne(s).
     ${lastPaie ? `Dernière paie le ${fmtDate(lastPaie.date_op)}.` : ''}</p>
     <div class="callout-actions">
       <button class="btn btn-primary" onclick="verserPaie()">Verser la paie & marquer payés</button>
@@ -171,38 +180,42 @@ function payerPrestataire(id) {
 }
 
 // ── Employés : paie hebdomadaire ─────────────────────────────────────
-// Passe par sb.rpc() pour contourner le cache de schéma PostgREST.
-// SQL à exécuter une seule fois dans Supabase SQL Editor :
-//   CREATE OR REPLACE FUNCTION public.toggle_salaire_paye(membre_id uuid, paye boolean)
-//   RETURNS void LANGUAGE sql SECURITY DEFINER AS $$
-//     UPDATE public.gp_membres SET salaire_paye = paye WHERE id = membre_id;
-//   $$;
-//   CREATE OR REPLACE FUNCTION public.reset_salaires_payes()
-//   RETURNS void LANGUAGE sql SECURITY DEFINER AS $$
-//     UPDATE public.gp_membres SET salaire_paye = false;
-//   $$;
-async function togglePaiement(id, paye) {
-  try {
-    const { error } = await sb.rpc('toggle_salaire_paye', { membre_id: id, paye });
-    if (error) throw error;
-    const m = DB.membres.find(x => x.id === id);
-    if (m) m.salaire_paye = paye;
-    renderActive();
-  } catch (e) { toast(errMsg(e), 'err'); }
+function togglePaiement(id, paye) {
+  renderActive(); // réinitialise visuellement la checkbox avant confirmation
+  if (!paye) return;
+  const m = DB.membres.find(x => x.id === id);
+  if (!m) return;
+  openModal({
+    title: `Payer ${fullName(m)}`,
+    body: `<p class="modal-text">Versement du salaire hebdomadaire — sera inscrit au trésor.</p>
+      <div class="form-grid">
+        <div class="field"><label for="tp-date">Date</label><input id="tp-date" type="date" value="${today()}"></div>
+        <div class="field"><label for="tp-lib">Libellé</label><input id="tp-lib" value="Salaire — ${esc(fullName(m))}"></div>
+      </div>`,
+    okLabel: `Verser ${septims(num(m.salaire))}`,
+    onOk: async () => {
+      await apiInsert('gp_operations', {
+        date_op: document.getElementById('tp-date').value || today(),
+        sens: 'Dépense', categorie: 'Salaires', auteur: currentAuthor(),
+        libelle: document.getElementById('tp-lib').value.trim() || `Salaire — ${fullName(m)}`,
+        montant: num(m.salaire), details: null,
+      });
+      setSalairePaye(id, true);
+      toast(`${septims(num(m.salaire))} versés à ${fullName(m)} — inscrit au trésor.`);
+      await reload();
+    },
+  });
 }
 
 async function resetPaiements() {
   if (!await confirmBox('Remettre tous les salaires à "Non payé" pour une nouvelle période ?', 'Nouvelle période')) return;
-  try {
-    const { error } = await sb.rpc('reset_salaires_payes');
-    if (error) throw error;
-    toast('Paiements réinitialisés.');
-    await reload();
-  } catch (e) { toast(errMsg(e), 'err'); }
+  clearSalairesPayes();
+  toast('Paiements réinitialisés.');
+  renderActive();
 }
 
 function verserPaie() {
-  const payes = membresPayes().filter(m => !m.salaire_paye);
+  const payes = membresPayes().filter(m => !estPaye(m));
   if (!payes.length) return toast('Tous les employés sont déjà marqués payés cette période.', 'err');
   const total = payes.reduce((s, m) => s + num(m.salaire), 0);
   const lignes = payes.map(m => `${fullName(m)} (${m.fonction || m.categorie}) : ${septims(m.salaire)}`);
@@ -217,15 +230,14 @@ function verserPaie() {
       <ul class="mini-list">${lignes.map(l => `<li>${esc(l)}</li>`).join('')}</ul>`,
     okLabel: `Verser ${septims(total)}`,
     onOk: async () => {
-      await apiInsert('gp_operations', {
-        date_op: document.getElementById('paie-date').value || today(),
-        sens: 'Dépense', categorie: 'Salaires', auteur: currentAuthor(),
-        libelle: document.getElementById('paie-lib').value.trim() || 'Paie des effectifs',
-        montant: total, details: lignes.join('\n'),
-      });
+      const dateOp = document.getElementById('paie-date').value || today();
+      const lib    = document.getElementById('paie-lib').value.trim() || 'Paie des effectifs';
       for (const m of payes) {
-        const { error: ep } = await sb.rpc('toggle_salaire_paye', { membre_id: m.id, paye: true });
-        if (ep) throw ep;
+        await apiInsert('gp_operations', {
+          date_op: dateOp, sens: 'Dépense', categorie: 'Salaires', auteur: currentAuthor(),
+          libelle: `${lib} — ${fullName(m)}`, montant: num(m.salaire), details: null,
+        });
+        setSalairePaye(m.id, true);
       }
       toast(`Paie de ${septims(total)} inscrite. Employés marqués payés.`);
       await reload();
