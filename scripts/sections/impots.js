@@ -12,6 +12,12 @@ const AGREMENT_TARIFS = {
 };
 const SECTEURS_LISTE = Object.keys(AGREMENT_TARIFS);
 
+// ── Cens de Sujétion — exclusions localStorage ─────────────────────────
+const GP_CENS_EXCL_KEY = 'gp_cens_exclusions';
+function getCensExclusions()          { try { return new Set(JSON.parse(localStorage.getItem(GP_CENS_EXCL_KEY) || '[]')); } catch { return new Set(); } }
+function setCensExclusion(mId, exclu) { const s = getCensExclusions(); if (exclu) s.add(String(mId)); else s.delete(String(mId)); try { localStorage.setItem(GP_CENS_EXCL_KEY, JSON.stringify([...s])); } catch {} }
+function clearCensExclusions()        { try { localStorage.removeItem(GP_CENS_EXCL_KEY); } catch {} }
+
 function patenteAmount(secteur) { return AGREMENT_TARIFS[secteur] ?? 220; }
 
 function calculerTaille(benefice) {
@@ -49,7 +55,10 @@ function baronnieBeneficeHebdo() {
 }
 
 function censMontant() { return num(DB.params.cens_montant ?? 45); }
-function censSujets()  { return num(DB.params.cens_sujets  ?? 0); }
+function censSujets() {
+  const excl = getCensExclusions();
+  return (DB.membres || []).filter(m => m.statut !== 'Congédié' && !excl.has(String(m.id))).length;
+}
 function loyerTotal()  { return num(DB.params.loyer_total  ?? 0); }
 
 RENDERERS.impots = () => {
@@ -111,6 +120,35 @@ RENDERERS.impots = () => {
         <td class="num">${part>0?septims(imp):'—'}</td></tr>`;
     }).join('');
   })();
+
+  // ── Bloc sujets cens ──
+  const censExcl    = getCensExclusions();
+  const censAll     = (DB.membres || []).filter(m => m.statut !== 'Congédié');
+  const censCount   = censAll.filter(m => !censExcl.has(String(m.id))).length;
+  const censRows    = censAll.length
+    ? censAll.map(m => {
+        const inclu = !censExcl.has(String(m.id));
+        const statPill = m.statut === 'Absent' ? '<span class="pill pill-apayer" style="font-size:.7rem;padding:.1rem .4rem">Absent</span> ' : '';
+        return `<tr class="${!inclu ? 'muted' : ''}">
+          <td>${statPill}<strong>${esc(fullName(m))}</strong>${m.fonction ? `<span class="note-inline">${esc(m.fonction)}</span>` : ''}</td>
+          <td class="center"><input type="checkbox" class="salaire-check" aria-label="Assujetti"
+            ${inclu ? 'checked' : ''}
+            ${edit ? `onchange="toggleCensSujet('${m.id}', this.checked)"` : 'disabled'}></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="2" class="muted-text center">Aucun membre dans les effectifs.</td></tr>`;
+  const censBlock = `<div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.5rem">
+      <h3 class="sheet-title" style="margin:0">Sujets assujettis au Cens (Art. II)</h3>
+      ${edit ? `<button class="btn btn-ghost" onclick="resetCensExclusions()">Réinitialiser</button>` : ''}
+    </div>
+    <p class="lead-in">Décoche un sujet pour l'exclure du cens cette semaine (absence, dérogation…). Le total se met à jour automatiquement.</p>
+    <div class="table-wrap"><table class="ledger">
+      <thead><tr><th>Membre</th><th class="center">Assujetti</th></tr></thead>
+      <tbody>${censRows}</tbody>
+      <tfoot><tr class="total"><td>${censCount} / ${censAll.length} sujet(s) inclus</td><td class="center">${septims(censMontant() * censCount)}</td></tr></tfoot>
+    </table></div>
+  </div>`;
 
   return `${sectionHead('Impôts','Récapitulatif automatique. La Taille est calculée depuis les ventes et achats du trésor de la semaine.')}
   <div class="summary-strip">
@@ -199,7 +237,9 @@ RENDERERS.impots = () => {
       </tbody>
       <tfoot><tr class="total"><td colspan="2">Total fixe</td><td class="num">${septims(totalFixed)}</td></tr></tfoot>
     </table>
-  </div>`;
+  </div>
+
+  ${censBlock}`;
 };
 
 // ── Agréments ────────────────────────────────────────────────────────
@@ -253,8 +293,7 @@ function delAgrement(id) {
 // ── Paramètres fixes ─────────────────────────────────────────────────
 function editParamsFiscaux() {
   const fields = [
-    { key: 'cens_montant', label: 'Cens de Sujétion (par sujet)', type: 'number', hint: 'Art. II — 45 sept. par semaine.' },
-    { key: 'cens_sujets', label: 'Nombre de sujets assujettis', type: 'number' },
+    { key: 'cens_montant', label: 'Cens de Sujétion (par sujet)', type: 'number', hint: 'Art. II — 45 sept. par semaine. Le nombre de sujets est géré via les cases à cocher ci-dessous.' },
     { key: 'loyer_total', label: 'Total des loyers hebdomadaires', type: 'number', hint: 'Art. III.' },
   ];
   openModal({
@@ -284,6 +323,19 @@ async function percevoirTaxe(id, silent = false) {
     });
     if (!silent) { toast(`${septims(due)} perçus.`); await reload(); }
   } catch(e) { toast(errMsg(e), 'err'); throw e; }
+}
+
+// ── Cens de Sujétion — gestion des sujets ────────────────────────────
+function toggleCensSujet(id, checked) {
+  setCensExclusion(id, !checked); // checked = inclus → exclu = false
+  renderActive();
+}
+
+async function resetCensExclusions() {
+  if (!await confirmBox('Réinitialiser la liste ? Tous les membres seront à nouveau assujettis au cens.', 'Réinitialiser')) return;
+  clearCensExclusions();
+  toast('Liste des sujets réinitialisée.');
+  renderActive();
 }
 
 async function percevoirTout() {
