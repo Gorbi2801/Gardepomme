@@ -18,6 +18,12 @@ function getCensExclusions()          { try { return new Set(JSON.parse(localSto
 function setCensExclusion(mId, exclu) { const s = getCensExclusions(); if (exclu) s.add(String(mId)); else s.delete(String(mId)); try { localStorage.setItem(GP_CENS_EXCL_KEY, JSON.stringify([...s])); } catch {} }
 function clearCensExclusions()        { try { localStorage.removeItem(GP_CENS_EXCL_KEY); } catch {} }
 
+const GP_CENS_PAYE_KEY = 'gp_cens_paye';
+function getCensPayeOpId()    { try { return localStorage.getItem(GP_CENS_PAYE_KEY) || null; } catch { return null; } }
+function setCensPayeOpId(id)  { try { localStorage.setItem(GP_CENS_PAYE_KEY, String(id)); } catch {} }
+function clearCensPaye()      { try { localStorage.removeItem(GP_CENS_PAYE_KEY); } catch {} }
+function isCensPaye()         { return !!getCensPayeOpId(); }
+
 function patenteAmount(secteur) { return AGREMENT_TARIFS[secteur] ?? 220; }
 
 function calculerTaille(benefice) {
@@ -137,17 +143,25 @@ RENDERERS.impots = () => {
         </tr>`;
       }).join('')
     : `<tr><td colspan="2" class="muted-text center">Aucun membre dans les effectifs.</td></tr>`;
+  const censTotalDu = censMontant() * censCount;
+  const censPaye    = isCensPaye();
   const censBlock = `<div class="sheet">
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.5rem">
       <h3 class="sheet-title" style="margin:0">Sujets assujettis au Cens (Art. II)</h3>
-      ${edit ? `<button class="btn btn-ghost" onclick="resetCensExclusions()">Réinitialiser</button>` : ''}
+      ${edit ? `<button class="btn btn-ghost" onclick="resetCensExclusions()">Nouvelle période</button>` : ''}
     </div>
     <p class="lead-in">Décoche un sujet pour l'exclure du cens cette semaine (absence, dérogation…). Le total se met à jour automatiquement.</p>
     <div class="table-wrap"><table class="ledger">
       <thead><tr><th>Membre</th><th class="center">Assujetti</th></tr></thead>
       <tbody>${censRows}</tbody>
-      <tfoot><tr class="total"><td>${censCount} / ${censAll.length} sujet(s) inclus</td><td class="center">${septims(censMontant() * censCount)}</td></tr></tfoot>
+      <tfoot><tr class="total"><td>${censCount} / ${censAll.length} sujet(s) inclus</td><td class="center">${septims(censTotalDu)}</td></tr></tfoot>
     </table></div>
+    ${edit ? `<div style="margin-top:.75rem;display:flex;justify-content:flex-end;align-items:center;gap:.75rem">
+      ${censPaye
+        ? `<span class="pill pill-paye">Cens payé</span>
+           <button class="btn btn-ghost" onclick="annulerCens()">Annuler le paiement</button>`
+        : `<button class="btn btn-primary" onclick="payerCens()"${censCount === 0 ? ' disabled' : ''}>Payer le cens — ${septims(censTotalDu)}</button>`}
+    </div>` : (censPaye ? `<div style="margin-top:.75rem;text-align:right"><span class="pill pill-paye">Cens payé</span></div>` : '')}
   </div>`;
 
   return `${sectionHead('Impôts','Récapitulatif automatique. La Taille est calculée depuis les ventes et achats du trésor de la semaine.')}
@@ -332,10 +346,55 @@ function toggleCensSujet(id, checked) {
 }
 
 async function resetCensExclusions() {
-  if (!await confirmBox('Réinitialiser la liste ? Tous les membres seront à nouveau assujettis au cens.', 'Réinitialiser')) return;
+  if (!await confirmBox('Nouvelle période — remettre tous les membres comme assujettis et réinitialiser le paiement ?', 'Nouvelle période')) return;
   clearCensExclusions();
-  toast('Liste des sujets réinitialisée.');
+  clearCensPaye();
+  toast('Cens réinitialisé — nouvelle période.');
   renderActive();
+}
+
+async function payerCens() {
+  const count   = censSujets();
+  const montant = censMontant() * count;
+  if (montant <= 0) { toast('Aucun sujet assujetti.', 'err'); return; }
+  openModal({
+    title: 'Payer le Cens de Sujétion',
+    body: `<p class="modal-text">${count} sujet(s) × ${septims(censMontant())} — sera inscrit au trésor.</p>
+      <div class="form-grid">
+        <div class="field"><label for="cens-date">Date</label><input id="cens-date" type="date" value="${today()}"></div>
+        <div class="field"><label for="cens-lib">Libellé</label><input id="cens-lib" value="Cens de Sujétion — ${count} sujet(s)"></div>
+      </div>`,
+    okLabel: `Payer ${septims(montant)}`,
+    onOk: async () => {
+      const op = await apiInsert('gp_operations', {
+        date_op: document.getElementById('cens-date').value || today(),
+        sens: 'Dépense', categorie: 'Impôts', auteur: currentAuthor(),
+        libelle: document.getElementById('cens-lib').value.trim() || `Cens de Sujétion — ${count} sujet(s)`,
+        montant, details: null,
+      });
+      setCensPayeOpId(op?.id || 'paid');
+      toast(`${septims(montant)} versés — Cens de Sujétion inscrit au trésor.`);
+      await reload();
+    },
+  });
+}
+
+async function annulerCens() {
+  const opId = getCensPayeOpId();
+  openModal({
+    title: 'Annuler le paiement du Cens',
+    body: `<p class="modal-text">La dépense du Cens de Sujétion sera retirée du trésor.</p>`,
+    okLabel: 'Annuler le paiement',
+    onOk: async () => {
+      if (opId && opId !== 'paid') {
+        const { error } = await sb.from('gp_operations').delete().eq('id', opId);
+        if (error) throw error;
+      }
+      clearCensPaye();
+      toast('Paiement du Cens annulé.');
+      await reload();
+    },
+  });
 }
 
 async function percevoirTout() {
