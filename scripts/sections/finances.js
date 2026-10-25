@@ -53,13 +53,16 @@ function currentWeekLabel() {
   return `Semaine ${isoWeek(monday).split('-W')[1]} — ${fmtDateShort(monday)} au ${fmtDateShort(sunday)} ${sunday.getFullYear()}`;
 }
 function isSunday() { return new Date().getDay() === 0; }
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 function opsPeriode() {
   if (finPeriode === 'tout') return DB.operations;
   if (finPeriode === 'semaine') {
     const { monday, sunday } = weekRange();
-    const from = monday.toISOString().slice(0, 10);
-    const to   = sunday.toISOString().slice(0, 10);
+    const from = toLocalDateStr(monday);
+    const to   = toLocalDateStr(sunday);
     return DB.operations.filter(o => o.date_op >= from && o.date_op <= to);
   }
   const d = new Date();
@@ -235,8 +238,8 @@ function dlTxt(txt, filename) {
 async function cloturerSemaine(regenOnly) {
   if (!canEdit('finances')) return;
   const { monday, sunday } = weekRange();
-  const from = monday.toISOString().slice(0, 10);
-  const to   = sunday.toISOString().slice(0, 10);
+  const from = toLocalDateStr(monday);
+  const to   = toLocalDateStr(sunday);
   const ops  = DB.operations.filter(o => o.date_op >= from && o.date_op <= to);
   const solde = soldeTresor();
   const weekKey = isoWeek(monday);

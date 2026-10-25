@@ -54,7 +54,7 @@ function esc(v) {
 function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 function septims(v) { const n = num(v); return (Number.isInteger(n) ? n : n.toFixed(2)).toLocaleString('fr-FR') + ' sept.'; }
 function septimsSigned(v) { const n = num(v); return (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n).toLocaleString('fr-FR') + ' sept.'; }
-function today() { return new Date().toISOString().slice(0, 10); }
+function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function fmtDate(d) {
   if (!d) return '—';
   const x = new Date(d.length === 10 ? d + 'T12:00:00' : d);

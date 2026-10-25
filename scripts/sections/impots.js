@@ -53,7 +53,7 @@ function derniereTaxe(c) {
 
 function baronnieBeneficeHebdo() {
   const { monday, sunday } = weekRange();
-  const from = monday.toISOString().slice(0,10), to = sunday.toISOString().slice(0,10);
+  const from = toLocalDateStr(monday), to = toLocalDateStr(sunday);
   const ops  = DB.operations.filter(o => o.date_op >= from && o.date_op <= to);
   const rec  = ops.filter(o => o.sens === 'Recette' && o.categorie === 'Vente').reduce((s,o) => s+num(o.montant), 0);
   const dep  = ops.filter(o => o.sens === 'Dépense'  && o.categorie === 'Achat').reduce((s,o) => s+num(o.montant), 0);
