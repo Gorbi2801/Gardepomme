@@ -12,17 +12,57 @@ const AGREMENT_TARIFS = {
 };
 const SECTEURS_LISTE = Object.keys(AGREMENT_TARIFS);
 
-// ── Cens de Sujétion — exclusions localStorage ─────────────────────────
+// ── Clé de semaine partagée pour tous les états hebdomadaires ──────────
 const GP_CENS_EXCL_KEY = 'gp_cens_exclusions';
-function getCensExclusions()          { try { return new Set(JSON.parse(localStorage.getItem(GP_CENS_EXCL_KEY) || '[]')); } catch { return new Set(); } }
-function setCensExclusion(mId, exclu) { const s = getCensExclusions(); if (exclu) s.add(String(mId)); else s.delete(String(mId)); try { localStorage.setItem(GP_CENS_EXCL_KEY, JSON.stringify([...s])); } catch {} }
-function clearCensExclusions()        { try { localStorage.removeItem(GP_CENS_EXCL_KEY); } catch {} }
-
 const GP_CENS_PAYE_KEY = 'gp_cens_paye';
-function getCensPayeOpId()    { try { return localStorage.getItem(GP_CENS_PAYE_KEY) || null; } catch { return null; } }
-function setCensPayeOpId(id)  { try { localStorage.setItem(GP_CENS_PAYE_KEY, String(id)); } catch {} }
-function clearCensPaye()      { try { localStorage.removeItem(GP_CENS_PAYE_KEY); } catch {} }
-function isCensPaye()         { return !!getCensPayeOpId(); }
+const GP_AGR_PAYE_KEY  = 'gp_agr_paye';
+
+function _impotWeekKey() { return isoWeek(weekRange().monday); }
+
+// ── Exclusions cens — réinitialisées automatiquement à chaque nouvelle semaine ──
+function getCensExclusions() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GP_CENS_EXCL_KEY) || '{}');
+    if (raw.week !== _impotWeekKey()) return new Set();
+    return new Set(raw.exclusions || []);
+  } catch { return new Set(); }
+}
+function setCensExclusion(mId, exclu) {
+  const s = getCensExclusions();
+  if (exclu) s.add(String(mId)); else s.delete(String(mId));
+  try { localStorage.setItem(GP_CENS_EXCL_KEY, JSON.stringify({ week: _impotWeekKey(), exclusions: [...s] })); } catch {}
+}
+function clearCensExclusions() { try { localStorage.removeItem(GP_CENS_EXCL_KEY); } catch {} }
+
+// ── Paiement cens — réinitialisé automatiquement à chaque nouvelle semaine ──
+function getCensPayeOpId() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GP_CENS_PAYE_KEY) || '{}');
+    if (raw.week !== _impotWeekKey()) return null;
+    return raw.opId || null;
+  } catch { return null; }
+}
+function setCensPayeOpId(id) {
+  try { localStorage.setItem(GP_CENS_PAYE_KEY, JSON.stringify({ week: _impotWeekKey(), opId: String(id) })); } catch {}
+}
+function clearCensPaye() { try { localStorage.removeItem(GP_CENS_PAYE_KEY); } catch {} }
+function isCensPaye()    { return !!getCensPayeOpId(); }
+
+// ── Paiement agréments — réinitialisé automatiquement à chaque nouvelle semaine ──
+function getAgrPayeIds() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GP_AGR_PAYE_KEY) || '{}');
+    if (raw.week !== _impotWeekKey()) return new Set();
+    return new Set(raw.ids || []);
+  } catch { return new Set(); }
+}
+function setAgrPaye(id) {
+  const s = getAgrPayeIds();
+  s.add(String(id));
+  try { localStorage.setItem(GP_AGR_PAYE_KEY, JSON.stringify({ week: _impotWeekKey(), ids: [...s] })); } catch {}
+}
+function clearAgrPaye() { try { localStorage.removeItem(GP_AGR_PAYE_KEY); } catch {} }
+function isAgrPaye(id)  { return getAgrPayeIds().has(String(id)); }
 
 function patenteAmount(secteur) { return AGREMENT_TARIFS[secteur] ?? 220; }
 
@@ -89,6 +129,7 @@ RENDERERS.impots = () => {
   // Lignes agrément
   const agrRows = (DB.agrements || []).map(a => {
     const montant = patenteAmount(a.secteur);
+    const paye    = isAgrPaye(a.id);
     return `<tr class="${!a.actif ? 'muted' : ''}">
       <td><strong>${esc(a.nom)}</strong><span class="note-inline">${esc(a.secteur)}</span></td>
       <td class="num">${septims(montant)}</td>
@@ -98,7 +139,7 @@ RENDERERS.impots = () => {
           aria-label="Activer">
       </td>
       <td class="center">
-        ${a.actif ? (a.paye
+        ${a.actif ? (paye
           ? '<span class="pill pill-paye">Payé</span>'
           : (edit ? `<button class="btn btn-small btn-primary" onclick="payerAgrement('${a.id}')">Payer</button>` : '<span class="pill pill-apayer">À payer</span>'))
           : '<span class="muted-text">—</span>'}
@@ -286,6 +327,7 @@ async function payerAgrement(id) {
       libelle: `Agrément — ${a.nom}`, montant,
     });
     await apiUpdate('gp_agrements', id, { paye: true });
+    setAgrPaye(id);
     toast(`Agrément "${a.nom}" payé — ${septims(montant)} sortis du trésor.`);
     await reload();
   } catch(e) { toast(errMsg(e), 'err'); }
@@ -296,6 +338,7 @@ async function resetPaiementsAgrements() {
   for (const a of DB.agrements.filter(x => x.paye)) {
     await apiUpdate('gp_agrements', a.id, { paye: false });
   }
+  clearAgrPaye();
   toast('Agréments réinitialisés.'); await reload();
 }
 

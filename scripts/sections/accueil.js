@@ -6,7 +6,7 @@ RENDERERS.accueil = () => {
 
   // 7 derniers jours
   const d7 = new Date(); d7.setDate(d7.getDate() - 7);
-  const from7 = d7.toISOString().slice(0, 10);
+  const from7 = toLocalDateStr(d7);
   const recent = DB.operations.filter(o => o.date_op >= from7);
   const rec7 = recent.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
   const dep7 = recent.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
@@ -17,7 +17,7 @@ RENDERERS.accueil = () => {
 
   const alerts = [];
   if (solde < 0) alerts.push(`<li class="bad"><button onclick="go('finances')">Le trésor est en négatif</button></li>`);
-  const agrementsNonPaies = agrActifs.filter(a => !a.paye).length;
+  const agrementsNonPaies = agrActifs.filter(a => !isAgrPaye(a.id)).length;
   if (agrementsNonPaies) alerts.push(`<li><button onclick="go('impots')">${agrementsNonPaies} Agrément${agrementsNonPaies > 1 ? 's' : ''} actif${agrementsNonPaies > 1 ? 's' : ''} non payé${agrementsNonPaies > 1 ? 's' : ''} cette semaine</button></li>`);
 
   const last = DB.operations.slice(0, 6).map(o => `<tr>
