@@ -25,6 +25,14 @@ async function refreshAll() {
   setLoading(true);
   try {
     await loadData();
+    // Clôture silencieuse des semaines passées sans archive
+    if (typeof autoClosePastWeeks === 'function') {
+      const n = await autoClosePastWeeks();
+      if (n > 0) {
+        await loadData(); // recharger avec les nouvelles entrées d'archives
+        toast(`${n} semaine${n > 1 ? 's' : ''} précédente${n > 1 ? 's' : ''} archivée${n > 1 ? 's' : ''} automatiquement.`);
+      }
+    }
     renderNav();
     renderActive();
   } catch (e) {

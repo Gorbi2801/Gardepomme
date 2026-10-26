@@ -23,6 +23,68 @@ function sensFromCategorie(cat) {
 
 function signed(o) { return o.sens === 'Recette' ? num(o.montant) : -num(o.montant); }
 function soldeTresor() { return DB.operations.reduce((s, o) => s + signed(o), 0); }
+// Solde à la fin d'une date précise (pour reconstruire les archives)
+function soldeTresorAt(dateFin) {
+  return (DB.operations || []).filter(o => o.date_op <= dateFin).reduce((s, o) => s + signed(o), 0);
+}
+// Convertit une clé ISO semaine ("2026-W43") en plage monday/sunday
+function isoWeekRange(wk) {
+  const [yearStr, weekStr] = wk.split('-W');
+  const year = Number(yearStr), week = Number(weekStr);
+  const jan4   = new Date(year, 0, 4);
+  const isoDay = jan4.getDay() || 7; // 1=lun … 7=dim
+  const monday = new Date(year, 0, 4 - (isoDay - 1) + (week - 1) * 7);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { monday, sunday };
+}
+
+// ── Clôture automatique des semaines passées ─────────────────────────
+// Insère silencieusement dans gp_semaines toute semaine passée ayant des
+// opérations mais pas encore d'entrée d'archive. Retourne le nombre de
+// semaines clôturées.
+async function autoClosePastWeeks() {
+  if (typeof canEdit !== 'function' || !canEdit('finances')) return 0;
+  const { monday: curMon } = weekRange();
+  const curKey     = isoWeek(curMon);
+  const closedKeys = new Set((DB.semaines || []).map(s => s.semaine));
+
+  // Collecte les semaines passées qui ont des opérations
+  const weekSet = new Set();
+  for (const op of DB.operations || []) {
+    if (!op.date_op) continue;
+    const wk = isoWeek(new Date(op.date_op));
+    if (wk < curKey) weekSet.add(wk);
+  }
+
+  const toClose = [...weekSet].filter(wk => !closedKeys.has(wk)).sort();
+  if (!toClose.length) return 0;
+
+  let count = 0;
+  for (const wk of toClose) {
+    try {
+      const { monday, sunday } = isoWeekRange(wk);
+      const from    = toLocalDateStr(monday);
+      const to      = toLocalDateStr(sunday);
+      const ops     = (DB.operations || []).filter(o => o.date_op >= from && o.date_op <= to);
+      const solde   = soldeTresorAt(to);
+      const weekNum = Number(wk.split('-W')[1]);
+      const label   = `Semaine ${weekNum} — ${fmtDateShort(monday)} au ${fmtDateShort(sunday)} ${sunday.getFullYear()}`;
+      const { txt, rec, dep, res } = genTxt(ops, solde, label, from, to);
+      await apiInsert('gp_semaines', {
+        semaine: wk, label, date_debut: from, date_fin: to,
+        recettes: rec, depenses: dep, resultat: res,
+        solde_fin: solde, contenu_txt: txt,
+        closed_at: new Date().toISOString(),
+      });
+      count++;
+    } catch (e) {
+      console.warn('[Gardepomme] Auto-clôture échouée pour', wk, e);
+    }
+  }
+  return count;
+}
 
 let finPeriode = 'semaine';  // défaut : semaine courante
 let finTab = 'registre';     // registre | archives

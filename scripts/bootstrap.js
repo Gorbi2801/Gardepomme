@@ -38,4 +38,12 @@
 
   loadSession();      // restaure le mode intendance depuis sessionStorage
   await refreshAll(); // charge les données et affiche
+
+  // Vérifie toutes les 5 min si une semaine vient de se terminer
+  // (rattrape le passage dimanche 23h59 → lundi 00h00 si l'app est ouverte)
+  setInterval(async () => {
+    if (typeof autoClosePastWeeks !== 'function') return;
+    const n = await autoClosePastWeeks();
+    if (n > 0) { await loadData(); renderActive(); toast(`${n} semaine${n > 1 ? 's' : ''} archivée${n > 1 ? 's' : ''} automatiquement.`); }
+  }, 5 * 60 * 1000);
 })();
