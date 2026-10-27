@@ -108,6 +108,7 @@ function renderCompteRendu() {
   return `
   <div class="cr-toolbar">
     <button class="btn btn-ghost" onclick="exportCompteRendu()">Exporter .txt</button>
+    <button class="btn btn-ghost" onclick="exportCompteRenduPng()">Télécharger .png</button>
   </div>
   <div class="cr-parchment">
     <div class="cr-ornament">❧</div>
@@ -171,6 +172,28 @@ ${line}
   a.download = 'catalogue_gardepomme.txt';
   a.click();
   toast('Compte rendu exporté.');
+}
+
+async function exportCompteRenduPng() {
+  const el = document.querySelector('.cr-parchment');
+  if (!el || typeof html2canvas === 'undefined') { toast('Export indisponible.'); return; }
+  toast('Génération de l\'image…');
+  try {
+    const canvas = await html2canvas(el, {
+      backgroundColor: '#F7EDCC',
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      logging: false
+    });
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'liste_des_prix_gardepomme.png';
+    a.click();
+    toast('Image téléchargée.');
+  } catch (e) {
+    toast('Erreur lors de la génération.');
+  }
 }
 
 function filterCatalogue() {
