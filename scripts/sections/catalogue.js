@@ -83,13 +83,11 @@ function renderCompteRendu() {
       <table class="cr-doc-table">
         <thead><tr>
           <th>Article</th>
-          <th class="cr-col-unite">Unité</th>
           <th class="cr-col-prix">Prix de vente</th>
           <th class="cr-col-prix">Prix d'achat</th>
         </tr></thead>
         <tbody>${items.map(a => `<tr>
           <td>${esc(a.nom)}</td>
-          <td class="cr-col-unite">${esc(a.unite || 'unité')}</td>
           <td class="cr-col-prix">${num(a.prix_vente) > 0 ? septims(a.prix_vente) : '—'}</td>
           <td class="cr-col-prix">${num(a.prix_achat) > 0 ? septims(a.prix_achat) : '—'}</td>
         </tr>`).join('')}</tbody>
