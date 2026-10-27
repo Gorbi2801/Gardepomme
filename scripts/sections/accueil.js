@@ -5,9 +5,9 @@ RENDERERS.accueil = () => {
   const solde = soldeTresor();
 
   // 7 derniers jours
-  const d7 = new Date(); d7.setDate(d7.getDate() - 7);
-  const from7 = toLocalDateStr(d7);
-  const recent = DB.operations.filter(o => o.date_op >= from7);
+  const { monday, sunday } = weekRange();
+  const fromSem = toLocalDateStr(monday), toSem = toLocalDateStr(sunday);
+  const recent = DB.operations.filter(o => o.date_op >= fromSem && o.date_op <= toSem);
   const rec7 = recent.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
   const dep7 = recent.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
 
@@ -41,8 +41,8 @@ RENDERERS.accueil = () => {
         <div><dt><button class="link" onclick="go('effectifs')">Employés en poste</button></dt><dd>${enPoste}</dd></div>
         <div><dt><button class="link" onclick="go('commerces')">Commerces ouverts</button></dt><dd>${ouverts}</dd></div>
         <div><dt><button class="link" onclick="go('codex')">Textes au codex</button></dt><dd>${DB.lois.length}</dd></div>
-        <div><dt>Recettes, 7 jours</dt><dd class="in">${septims(rec7)}</dd></div>
-        <div><dt>Dépenses, 7 jours</dt><dd class="out">${septims(dep7)}</dd></div>
+        <div><dt>Recettes, cette semaine</dt><dd class="in">${septims(rec7)}</dd></div>
+        <div><dt>Dépenses, cette semaine</dt><dd class="out">${septims(dep7)}</dd></div>
       </dl>
     </section>
 
