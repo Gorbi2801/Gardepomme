@@ -120,7 +120,10 @@ function renderCompteRendu() {
       Arrêté en la baronnie de Gardepomme, vassale du Comté de Bruma.
       <span class="cr-footer-sig">Haldor Blancerf, Baron de Gardepomme</span>
     </p>
-    <div class="cr-seal">✦ &nbsp; Sceau de la Baronnie &nbsp; ✦</div>
+    <div class="cr-seals">
+      <img src="assets/blancerf_sceau.png" alt="Sceau des Blancerf" class="cr-seal-img">
+      <img src="assets/gardepomme_sceau.png" alt="Sceau de Gardepomme" class="cr-seal-img">
+    </div>
   </div>`;
 }
 
