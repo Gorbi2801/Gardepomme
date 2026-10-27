@@ -72,22 +72,26 @@ function renderCompteRendu() {
   const cats = CAT_CATEGORIES.filter(cat =>
     DB.catalogue.some(a => a.categorie === cat)
   );
-  // Autres : articles sans catégorie reconnue
   const autresItems = DB.catalogue.filter(a =>
     !CAT_CATEGORIES.includes(a.categorie) || a.categorie === 'Autre'
   );
 
   const renderCat = (label, items) => {
     if (!items.length) return '';
-    return `<div class="cr-group">
-      <h3>${esc(label)}</h3>
-      <table class="ledger cr-table">
-        <thead><tr><th>Article</th><th>Unité</th><th class="num">Prix de vente</th><th class="num">Prix d'achat</th></tr></thead>
+    return `<div class="cr-section">
+      <div class="cr-section-title">${esc(label)}</div>
+      <table class="cr-doc-table">
+        <thead><tr>
+          <th>Article</th>
+          <th class="cr-col-unite">Unité</th>
+          <th class="cr-col-prix">Prix de vente</th>
+          <th class="cr-col-prix">Prix d'achat</th>
+        </tr></thead>
         <tbody>${items.map(a => `<tr>
           <td>${esc(a.nom)}</td>
-          <td class="muted-text">${esc(a.unite || 'unité')}</td>
-          <td class="num in">${num(a.prix_vente) > 0 ? septims(a.prix_vente) : '<span class="muted-text">—</span>'}</td>
-          <td class="num out">${num(a.prix_achat) > 0 ? septims(a.prix_achat) : '<span class="muted-text">—</span>'}</td>
+          <td class="cr-col-unite">${esc(a.unite || 'unité')}</td>
+          <td class="cr-col-prix">${num(a.prix_vente) > 0 ? septims(a.prix_vente) : '—'}</td>
+          <td class="cr-col-prix">${num(a.prix_achat) > 0 ? septims(a.prix_achat) : '—'}</td>
         </tr>`).join('')}</tbody>
       </table>
     </div>`;
@@ -97,19 +101,28 @@ function renderCompteRendu() {
     .filter(cat => cat !== 'Autre')
     .map(cat => renderCat(cat, DB.catalogue.filter(a => a.categorie === cat)))
     .join('');
-
   const autres = renderCat('Autre', autresItems);
 
   if (!DB.catalogue.length) {
     return `<div class="sheet"><p class="muted-text">Aucun article dans le catalogue.</p></div>`;
   }
 
-  return `<div class="sheet cr-sheet">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-      <h3 class="sheet-title" style="margin:0">Liste des prix — Baronnie de Gardepomme</h3>
-      <button class="btn btn-ghost" onclick="exportCompteRendu()">Exporter .txt</button>
-    </div>
+  return `
+  <div class="cr-toolbar">
+    <button class="btn btn-ghost" onclick="exportCompteRendu()">Exporter .txt</button>
+  </div>
+  <div class="cr-parchment">
+    <div class="cr-ornament">❧</div>
+    <h2 class="cr-title">Baronnie de Gardepomme</h2>
+    <p class="cr-subtitle">Registre officiel des prix — Établi par l'autorité du Baron</p>
+    <div class="cr-divider"><span>✦</span></div>
     ${grouped}${autres}
+    <div class="cr-divider"><span>✦</span></div>
+    <p class="cr-footer">
+      Arrêté en la baronnie de Gardepomme, vassale du Comté de Bruma.
+      <span class="cr-footer-sig">Haldor Blancerf, Baron de Gardepomme</span>
+    </p>
+    <div class="cr-seal">✦ &nbsp; Sceau de la Baronnie &nbsp; ✦</div>
   </div>`;
 }
 
