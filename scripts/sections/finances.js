@@ -134,12 +134,14 @@ function periodeDebutCourante() {
     return toLocalDateStr(d);
   }
 
-  // Pas de clôture manuelle → la semaine courante est la dernière entrée auto-clôturée,
-  // non validée manuellement. On affiche les opérations depuis son date_debut.
-  const autos = DB.semaines.filter(s => s.semaine && !s.semaine.includes('_') && s.date_debut);
+  // Pas de clôture manuelle → utiliser la clé ISO de la dernière entrée auto (ex : "2026-W45")
+  // pour recalculer le lundi de cette semaine via isoWeekRange(), sans dépendre de date_debut.
+  const autos = DB.semaines.filter(s => s.semaine && !s.semaine.includes('_'));
   if (!autos.length) return null;
-  const lastDebut = autos.reduce((max, s) => s.date_debut > max ? s.date_debut : max, '');
-  return lastDebut || null;
+  const lastWk = autos.reduce((max, s) => s.semaine > max ? s.semaine : max, '');
+  if (!lastWk) return null;
+  const { monday } = isoWeekRange(lastWk);
+  return toLocalDateStr(monday);
 }
 function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
