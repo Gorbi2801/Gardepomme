@@ -118,17 +118,28 @@ function currentWeekLabel() {
 function isSunday() { return new Date().getDay() === 0; }
 // Début de la période courante = lendemain de la dernière clôture MANUELLE.
 // Les clôtures manuelles utilisent le format "YYYY-MM-DD_YYYY-MM-DD" dans le champ semaine.
-// Les anciennes clôtures automatiques utilisaient "YYYY-Www" — elles sont ignorées ici.
-// Retourne null si aucune clôture manuelle n'existe (→ toutes les opérations sont "en cours").
+// Les clôtures automatiques (format "YYYY-Www") ne comptent pas comme clôtures, mais
+// servent de repère : si aucune clôture manuelle n'existe, on affiche les opérations
+// depuis le date_debut de la dernière entrée auto (= début de la semaine en cours ouverte).
 function periodeDebutCourante() {
   if (!DB.semaines?.length) return null;
+
+  // Clôtures manuelles (format YYYY-MM-DD_YYYY-MM-DD) — prioritaires
   const manuelles = DB.semaines.filter(s => s.semaine && s.semaine.includes('_'));
-  if (!manuelles.length) return null;
-  const lastFin = manuelles.reduce((max, s) => s.date_fin > max ? s.date_fin : max, '');
-  if (!lastFin) return null;
-  const d = new Date(lastFin + 'T12:00:00');
-  d.setDate(d.getDate() + 1);
-  return toLocalDateStr(d);
+  if (manuelles.length) {
+    const lastFin = manuelles.reduce((max, s) => s.date_fin > max ? s.date_fin : max, '');
+    if (!lastFin) return null;
+    const d = new Date(lastFin + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    return toLocalDateStr(d);
+  }
+
+  // Pas de clôture manuelle → la semaine courante est la dernière entrée auto-clôturée,
+  // non validée manuellement. On affiche les opérations depuis son date_debut.
+  const autos = DB.semaines.filter(s => s.semaine && !s.semaine.includes('_') && s.date_debut);
+  if (!autos.length) return null;
+  const lastDebut = autos.reduce((max, s) => s.date_debut > max ? s.date_debut : max, '');
+  return lastDebut || null;
 }
 function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
