@@ -116,16 +116,29 @@ function currentWeekLabel() {
   return `Depuis le ${fmtDateShort(new Date(from + 'T12:00:00'))}`;
 }
 function isSunday() { return new Date().getDay() === 0; }
-// Début de la période courante = lendemain du date_fin le plus récent parmi toutes les
-// clôtures (manuelles ou automatiques). Ex : W45 date_fin=2026-11-08 → période courante
-// débute le 2026-11-09. Même logique pour les clôtures manuelles (format YYYY-MM-DD_YYYY-MM-DD).
+// Début de la période courante — calculé UNIQUEMENT depuis le champ `semaine`,
+// sans dépendance à la colonne date_fin (qui peut être absente ou nulle en DB).
+//   Clôture auto  "YYYY-Www"              → dimanche de cette semaine + 1 jour
+//   Clôture manu  "YYYY-MM-DD_YYYY-MM-DD" → 2e date de la paire      + 1 jour
+// On prend la date de fin la plus récente parmi toutes les entrées.
 function periodeDebutCourante() {
   if (!DB.semaines?.length) return null;
-  const lastFin = DB.semaines
-    .filter(s => s.date_fin)
-    .reduce((max, s) => s.date_fin > max ? s.date_fin : max, '');
-  if (!lastFin) return null;
-  const d = new Date(lastFin + 'T12:00:00');
+  let maxFin = '';
+  for (const s of DB.semaines) {
+    if (!s.semaine) continue;
+    let fin = '';
+    if (s.semaine.includes('_')) {
+      // Clôture manuelle : "YYYY-MM-DD_YYYY-MM-DD"
+      fin = s.semaine.split('_')[1] || '';
+    } else if (s.semaine.includes('-W')) {
+      // Clôture auto : "YYYY-Www" → dimanche de la semaine
+      const { sunday } = isoWeekRange(s.semaine);
+      fin = toLocalDateStr(sunday);
+    }
+    if (fin > maxFin) maxFin = fin;
+  }
+  if (!maxFin) return null;
+  const d = new Date(maxFin + 'T12:00:00');
   d.setDate(d.getDate() + 1);
   return toLocalDateStr(d);
 }
