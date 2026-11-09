@@ -163,9 +163,15 @@ function opsPeriode() {
 
 RENDERERS.finances = () => {
   const solde = soldeTresor();
-  const ops   = opsPeriode();
-  const rec7  = ops.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
-  const dep7  = ops.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
+
+  // Les cartes du résumé affichent TOUJOURS la période courante (depuis la dernière clôture),
+  // indépendamment du filtre du registre (finPeriode).
+  const periodeFrom = periodeDebutCourante();
+  const opsP  = periodeFrom
+    ? DB.operations.filter(o => o.date_op >= periodeFrom)
+    : DB.operations;
+  const rec7  = opsP.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
+  const dep7  = opsP.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
 
   const tabs = [['registre', 'Registre'], ['archives', 'Archives hebdomadaires']];
 
