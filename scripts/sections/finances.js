@@ -112,7 +112,7 @@ function fmtDateShort(d) {
 }
 function currentWeekLabel() {
   const from = periodeDebutCourante();
-  if (!from) return 'Depuis le début (aucune clôture)';
+  if (!from) return 'Depuis le début';
   return `Depuis le ${fmtDateShort(new Date(from + 'T12:00:00'))}`;
 }
 function isSunday() { return new Date().getDay() === 0; }
@@ -153,17 +153,19 @@ function opsPeriode() {
 RENDERERS.finances = () => {
   const solde = soldeTresor();
 
-  const opsP  = opsPeriode();
-  const rec7  = opsP.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
-  const dep7  = opsP.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
+  // Résumé : période en cours (depuis la dernière clôture manuelle)
+  const fromPer = periodeDebutCourante();
+  const opsP    = fromPer ? DB.operations.filter(o => o.date_op >= fromPer) : DB.operations;
+  const rec7    = opsP.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
+  const dep7    = opsP.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
 
   const tabs = [['registre', 'Registre'], ['archives', 'Archives hebdomadaires']];
 
   return `${sectionHead('Trésor de la baronnie', 'Les recettes et dépenses. Vue par défaut : depuis la dernière clôture manuelle.')}
   <div class="summary-strip">
-    <div><span>Recettes</span><strong class="in">${septims(rec7)}</strong></div>
-    <div><span>Dépenses</span><strong class="out">${septims(dep7)}</strong></div>
-    <div><span>Résultat</span><strong class="${rec7-dep7 >= 0 ? 'in' : 'out'}">${septimsSigned(rec7 - dep7)}</strong></div>
+    <div><span>Recettes, période en cours</span><strong class="in">${septims(rec7)}</strong></div>
+    <div><span>Dépenses, période en cours</span><strong class="out">${septims(dep7)}</strong></div>
+    <div><span>Résultat, période en cours</span><strong class="${rec7-dep7 >= 0 ? 'in' : 'out'}">${septimsSigned(rec7 - dep7)}</strong></div>
   </div>
   <div class="tabs" role="tablist">
     ${tabs.map(([k, l]) => `<button role="tab" aria-selected="${k === finTab}" class="tab${k === finTab ? ' active' : ''}" onclick="finSetTab('${k}')">${esc(l)}</button>`).join('')}
@@ -317,7 +319,7 @@ async function cloturerSemaine() {
   const ops  = DB.operations.filter(o => o.date_op >= from && o.date_op <= to);
   const solde = soldeTresor();
   const periodKey = `${from}_${to}`;
-  const label = currentWeekLabel();
+  const label = `Période du ${fmtDate(from)} au ${fmtDate(to)}`;
 
   if (!await confirmBox(
     `Clôturer la période en cours ?\n\n${ops.length} opération(s) du ${fmtDate(from)} au ${fmtDate(to)}. Un fichier .txt sera généré et les paiements de salaires réinitialisés.`,

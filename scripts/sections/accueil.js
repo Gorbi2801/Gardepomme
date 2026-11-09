@@ -4,11 +4,9 @@
 RENDERERS.accueil = () => {
   const solde = soldeTresor();
 
-  // Période en cours (même logique que le Trésor : depuis la dernière clôture)
+  // Période en cours (depuis la dernière clôture manuelle)
   const fromPer = periodeDebutCourante();
-  const recent = fromPer
-    ? DB.operations.filter(o => o.date_op >= fromPer)
-    : DB.operations;
+  const recent  = fromPer ? DB.operations.filter(o => o.date_op >= fromPer) : DB.operations;
   const rec7 = recent.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
   const dep7 = recent.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
 
