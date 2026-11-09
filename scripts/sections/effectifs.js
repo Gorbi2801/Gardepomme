@@ -183,7 +183,6 @@ function payerPrestataire(id) {
 
 // ── Employés : paie hebdomadaire ─────────────────────────────────────
 function togglePaiement(id, paye) {
-  renderActive(); // réinitialise l'état visuel avant la modale
   const m = DB.membres.find(x => x.id === id);
   if (!m) return;
 
