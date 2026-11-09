@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════════════════
 //  TRÉSOR
-//  Vue par défaut : semaine courante (lundi–dimanche).
+//  Vue par défaut : depuis la dernière clôture manuelle.
 //  Clôture : génère un .txt + archive dans gp_semaines.
 // ══════════════════════════════════════════════════════════════════════
 const OP_CATEGORIES_MANUEL = ['Vente', 'Achat', 'Amende'];
@@ -111,10 +111,21 @@ function fmtDateShort(d) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 function currentWeekLabel() {
-  const { monday, sunday } = weekRange();
-  return `Semaine ${isoWeek(monday).split('-W')[1]} — ${fmtDateShort(monday)} au ${fmtDateShort(sunday)} ${sunday.getFullYear()}`;
+  const from = periodeDebutCourante();
+  if (!from) return 'Depuis le début (aucune clôture)';
+  return `Depuis le ${fmtDateShort(new Date(from + 'T12:00:00'))}`;
 }
 function isSunday() { return new Date().getDay() === 0; }
+// Début de la période courante = lendemain de la dernière clôture manuelle.
+// Retourne null si aucune clôture n'existe encore (→ toutes les opérations sont "en cours").
+function periodeDebutCourante() {
+  if (!DB.semaines?.length) return null;
+  const lastFin = DB.semaines.reduce((max, s) => s.date_fin > max ? s.date_fin : max, '');
+  if (!lastFin) return null;
+  const d = new Date(lastFin + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return toLocalDateStr(d);
+}
 function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
@@ -122,10 +133,8 @@ function toLocalDateStr(d) {
 function opsPeriode() {
   if (finPeriode === 'tout') return DB.operations;
   if (finPeriode === 'semaine') {
-    const { monday, sunday } = weekRange();
-    const from = toLocalDateStr(monday);
-    const to   = toLocalDateStr(sunday);
-    return DB.operations.filter(o => o.date_op >= from && o.date_op <= to);
+    const from = periodeDebutCourante();
+    return from ? DB.operations.filter(o => o.date_op >= from) : DB.operations;
   }
   const d = new Date();
   let from;
@@ -141,12 +150,9 @@ RENDERERS.finances = () => {
   const rec7  = ops.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
   const dep7  = ops.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
 
-  const weekKey = isoWeek(weekRange().monday);
-  const dejaClose = DB.semaines?.some(s => s.semaine === weekKey);
-
   const tabs = [['registre', 'Registre'], ['archives', 'Archives hebdomadaires']];
 
-  return `${sectionHead('Trésor de la baronnie', 'Les recettes et dépenses. Vue par défaut : semaine courante (lundi–dimanche).')}
+  return `${sectionHead('Trésor de la baronnie', 'Les recettes et dépenses. Vue par défaut : depuis la dernière clôture manuelle.')}
   <div class="summary-strip">
     <div><span>Recettes (période)</span><strong class="in">${septims(rec7)}</strong></div>
     <div><span>Dépenses (période)</span><strong class="out">${septims(dep7)}</strong></div>
@@ -155,17 +161,17 @@ RENDERERS.finances = () => {
   <div class="tabs" role="tablist">
     ${tabs.map(([k, l]) => `<button role="tab" aria-selected="${k === finTab}" class="tab${k === finTab ? ' active' : ''}" onclick="finSetTab('${k}')">${esc(l)}</button>`).join('')}
   </div>
-  ${finTab === 'archives' ? renderArchives() : renderRegistre(dejaClose)}`;
+  ${finTab === 'archives' ? renderArchives() : renderRegistre()}`;
 };
 
-function renderRegistre(dejaClose) {
+function renderRegistre() {
   const edit = canEdit('finances');
   const ops  = opsPeriode();
   const rec  = ops.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
   const dep  = ops.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
 
   const periodes = [
-    ['semaine', 'Semaine courante'],
+    ['semaine', 'Période en cours'],
     ['tout', 'Depuis le début'],
     ['7j', '7 derniers jours'],
     ['30j', '30 derniers jours'],
@@ -195,10 +201,8 @@ function renderRegistre(dejaClose) {
       ${rowActions('finances', `editOp('${o.id}')`, `delOp('${o.id}')`)}
     </tr>`).join('');
 
-  const clotureBtn = edit && finPeriode === 'semaine'
-    ? dejaClose
-      ? `<button class="btn btn-ghost" onclick="cloturerSemaine(true)">Re-générer le .txt</button>`
-      : `<button class="btn btn-primary" title="${isSunday() ? '' : 'Disponible à tout moment, recommandé le dimanche'}" onclick="cloturerSemaine(false)">Clôturer la semaine</button>`
+  const clotureBtn = edit && finPeriode === 'semaine' && ops.length > 0
+    ? `<button class="btn btn-primary" onclick="cloturerSemaine()">Clôturer la semaine</button>`
     : '';
 
   const weekLabel = finPeriode === 'semaine' ? `<p class="muted-text" style="margin-bottom:.6rem;font-size:.9rem">${currentWeekLabel()}</p>` : '';
@@ -297,37 +301,35 @@ function dlTxt(txt, filename) {
   a.click();
 }
 
-async function cloturerSemaine(regenOnly) {
+async function cloturerSemaine() {
   if (!canEdit('finances')) return;
-  const { monday, sunday } = weekRange();
-  const from = toLocalDateStr(monday);
-  const to   = toLocalDateStr(sunday);
+  const from = periodeDebutCourante()
+    || [...DB.operations].sort((a, b) => a.date_op.localeCompare(b.date_op))[0]?.date_op
+    || today();
+  const to   = today();
   const ops  = DB.operations.filter(o => o.date_op >= from && o.date_op <= to);
   const solde = soldeTresor();
-  const weekKey = isoWeek(monday);
+  const periodKey = `${from}_${to}`;
   const label = currentWeekLabel();
 
-  if (!regenOnly && !await confirmBox(
-    `Clôturer ${label} ?\n\nUn fichier .txt sera généré et le récapitulatif sauvegardé dans les archives. Les données du trésor ne sont pas supprimées — la vue "Semaine courante" affichera la nouvelle semaine dès lundi.`,
+  if (!await confirmBox(
+    `Clôturer la période en cours ?\n\n${ops.length} opération(s) du ${fmtDate(from)} au ${fmtDate(to)}. Un fichier .txt sera généré et les paiements de salaires réinitialisés.`,
     'Clôturer la semaine'
   )) return;
 
   const { txt, rec, dep, res } = genTxt(ops, solde, label, from, to);
-  const filename = `tresor_gardepomme_${weekKey}.txt`;
+  const filename = `tresor_gardepomme_${from}_${to}.txt`;
   dlTxt(txt, filename);
 
-  if (!regenOnly) {
-    const existing = DB.semaines?.find(s => s.semaine === weekKey);
-    const row = { semaine: weekKey, label, date_debut: from, date_fin: to,
-      recettes: rec, depenses: dep, resultat: res, solde_fin: solde,
-      contenu_txt: txt, closed_at: new Date().toISOString() };
-    if (existing) await apiUpdate('gp_semaines', existing.id, row);
-    else await apiInsert('gp_semaines', row);
-    toast(`Semaine clôturée — ${filename} téléchargé.`);
-    await reload();
-  } else {
-    toast(`${filename} régénéré et téléchargé.`);
-  }
+  const existing = DB.semaines?.find(s => s.semaine === periodKey);
+  const row = { semaine: periodKey, label, date_debut: from, date_fin: to,
+    recettes: rec, depenses: dep, resultat: res, solde_fin: solde,
+    contenu_txt: txt, closed_at: new Date().toISOString() };
+  if (existing) await apiUpdate('gp_semaines', existing.id, row);
+  else await apiInsert('gp_semaines', row);
+  clearSalairesPayes();
+  toast(`Période clôturée — ${filename} téléchargé.`);
+  await reload();
 }
 
 function dlArchive(id) {

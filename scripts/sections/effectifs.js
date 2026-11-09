@@ -32,15 +32,39 @@ function membresPayes()   { return DB.membres.filter(m => estEmploye(m) && m.sta
 function prestatairesActifs() { return DB.membres.filter(m => estPrestataire(m) && m.statut !== 'Congédié'); }
 function masseSalariale() { return membresPayes().reduce((s, m) => s + num(m.salaire), 0); }
 
-// ── Paiements hebdomadaires stockés en localStorage ──────────────────
+// ── Paiements hebdomadaires stockés en localStorage + cache mémoire ──
 // Format : { [memberId]: operationId } — permet d'annuler en décochant
 const GP_SALAIRES_KEY = 'gp_salaires_current';
-function getSalairesMap()          { try { return JSON.parse(localStorage.getItem(GP_SALAIRES_KEY) || '{}'); } catch { return {}; } }
-function estPaye(m)                { return m.id in getSalairesMap(); }
-function getOpId(memberId)         { return getSalairesMap()[memberId] || null; }
-function setSalairePaye(mId, opId) { const s = getSalairesMap(); s[mId] = opId; try { localStorage.setItem(GP_SALAIRES_KEY, JSON.stringify(s)); } catch {} }
-function clearSalairePaye(mId)     { const s = getSalairesMap(); delete s[mId]; try { localStorage.setItem(GP_SALAIRES_KEY, JSON.stringify(s)); } catch {} }
-function clearSalairesPayes()      { try { localStorage.removeItem(GP_SALAIRES_KEY); } catch {} }
+let _salairesCache = null;
+
+function getSalairesMap() {
+  try {
+    _salairesCache = JSON.parse(localStorage.getItem(GP_SALAIRES_KEY) || '{}');
+  } catch {
+    _salairesCache = _salairesCache || {};
+  }
+  return _salairesCache;
+}
+function estPaye(m)   { return m.id in getSalairesMap(); }
+function getOpId(id)  { return getSalairesMap()[id] || null; }
+function setSalairePaye(mId, opId) {
+  const s = getSalairesMap();
+  s[mId] = opId;
+  _salairesCache = s;
+  try { localStorage.setItem(GP_SALAIRES_KEY, JSON.stringify(s)); } catch {
+    console.warn('[GP] localStorage indisponible — état salaires conservé en mémoire.');
+  }
+}
+function clearSalairePaye(mId) {
+  const s = getSalairesMap();
+  delete s[mId];
+  _salairesCache = s;
+  try { localStorage.setItem(GP_SALAIRES_KEY, JSON.stringify(s)); } catch {}
+}
+function clearSalairesPayes() {
+  _salairesCache = {};
+  try { localStorage.removeItem(GP_SALAIRES_KEY); } catch {}
+}
 
 function masseRestante()  { return membresPayes().filter(m => !estPaye(m)).reduce((s, m) => s + num(m.salaire), 0); }
 
@@ -265,5 +289,6 @@ function verserPaie() {
       toast(`Paie de ${septims(total)} inscrite. Employés marqués payés.`);
       await reload();
     },
+    onCancel: () => renderActive(),
   });
 }
