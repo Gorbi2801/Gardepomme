@@ -116,32 +116,18 @@ function currentWeekLabel() {
   return `Depuis le ${fmtDateShort(new Date(from + 'T12:00:00'))}`;
 }
 function isSunday() { return new Date().getDay() === 0; }
-// Début de la période courante = lendemain de la dernière clôture MANUELLE.
-// Les clôtures manuelles utilisent le format "YYYY-MM-DD_YYYY-MM-DD" dans le champ semaine.
-// Les clôtures automatiques (format "YYYY-Www") ne comptent pas comme clôtures, mais
-// servent de repère : si aucune clôture manuelle n'existe, on affiche les opérations
-// depuis le date_debut de la dernière entrée auto (= début de la semaine en cours ouverte).
+// Début de la période courante = lendemain du date_fin le plus récent parmi toutes les
+// clôtures (manuelles ou automatiques). Ex : W45 date_fin=2026-11-08 → période courante
+// débute le 2026-11-09. Même logique pour les clôtures manuelles (format YYYY-MM-DD_YYYY-MM-DD).
 function periodeDebutCourante() {
   if (!DB.semaines?.length) return null;
-
-  // Clôtures manuelles (format YYYY-MM-DD_YYYY-MM-DD) — prioritaires
-  const manuelles = DB.semaines.filter(s => s.semaine && s.semaine.includes('_'));
-  if (manuelles.length) {
-    const lastFin = manuelles.reduce((max, s) => s.date_fin > max ? s.date_fin : max, '');
-    if (!lastFin) return null;
-    const d = new Date(lastFin + 'T12:00:00');
-    d.setDate(d.getDate() + 1);
-    return toLocalDateStr(d);
-  }
-
-  // Pas de clôture manuelle → utiliser la clé ISO de la dernière entrée auto (ex : "2026-W45")
-  // pour recalculer le lundi de cette semaine via isoWeekRange(), sans dépendre de date_debut.
-  const autos = DB.semaines.filter(s => s.semaine && !s.semaine.includes('_'));
-  if (!autos.length) return null;
-  const lastWk = autos.reduce((max, s) => s.semaine > max ? s.semaine : max, '');
-  if (!lastWk) return null;
-  const { monday } = isoWeekRange(lastWk);
-  return toLocalDateStr(monday);
+  const lastFin = DB.semaines
+    .filter(s => s.date_fin)
+    .reduce((max, s) => s.date_fin > max ? s.date_fin : max, '');
+  if (!lastFin) return null;
+  const d = new Date(lastFin + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return toLocalDateStr(d);
 }
 function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
