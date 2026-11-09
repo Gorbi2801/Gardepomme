@@ -17,9 +17,7 @@ const GP_CENS_EXCL_KEY = 'gp_cens_exclusions';
 const GP_CENS_PAYE_KEY = 'gp_cens_paye';
 const GP_AGR_PAYE_KEY  = 'gp_agr_paye';
 
-// Clé de période : change dès qu'une nouvelle clôture crée une nouvelle période.
-// Les états localStorage (cens, agréments) se réinitialisent automatiquement.
-function _impotWeekKey() { return periodeDebutCourante() || isoWeek(weekRange().monday); }
+function _impotWeekKey() { return isoWeek(weekRange().monday); }
 
 // ── Exclusions cens — réinitialisées automatiquement à chaque nouvelle semaine ──
 function getCensExclusions() {
@@ -93,10 +91,10 @@ function derniereTaxe(c) {
   return DB.operations.find(o => o.commerce_id === c.id && o.categorie === 'Taxes');
 }
 
-// Bénéfice de la période courante (depuis la dernière clôture), pour le calcul de la Taille.
 function baronnieBeneficeHebdo() {
-  const from = periodeDebutCourante();
-  const ops  = from ? DB.operations.filter(o => o.date_op >= from) : DB.operations;
+  const { monday, sunday } = weekRange();
+  const from = toLocalDateStr(monday), to = toLocalDateStr(sunday);
+  const ops  = DB.operations.filter(o => o.date_op >= from && o.date_op <= to);
   const rec  = ops.filter(o => o.sens === 'Recette' && o.categorie === 'Vente').reduce((s,o) => s+num(o.montant), 0);
   const dep  = ops.filter(o => o.sens === 'Dépense'  && o.categorie === 'Achat').reduce((s,o) => s+num(o.montant), 0);
   return { ventes: rec, achats: dep, benefice: Math.max(0, rec - dep) };
@@ -207,13 +205,13 @@ RENDERERS.impots = () => {
     </div>` : (censPaye ? `<div style="margin-top:.75rem;text-align:right"><span class="pill pill-paye">Cens payé</span></div>` : '')}
   </div>`;
 
-  return `${sectionHead('Impôts','Récapitulatif automatique. La Taille est calculée depuis les ventes et achats du trésor de la période en cours.')}
+  return `${sectionHead('Impôts','Récapitulatif automatique. La Taille est calculée depuis les ventes et achats du trésor de la semaine.')}
   <div class="summary-strip">
     <div><span>Taille (baronnie)</span><strong>${septims(baronTaille)}</strong></div>
     <div><span>Agréments actifs (${agrActifs.length})</span><strong>${septims(totalAgrement)}</strong></div>
     ${totalCommerces ? `<div><span>Taxes commerces</span><strong>${septims(totalCommerces)}</strong></div>` : ''}
     <div><span>Cens & loyers</span><strong>${septims(totalFixed)}</strong></div>
-    <div class="ruled"><span>Total dû (période)</span><strong>${septims(grandTotal)}</strong></div>
+    <div class="ruled"><span>Total dû cette semaine</span><strong>${septims(grandTotal)}</strong></div>
   </div>
 
   <!-- Agréments -->
@@ -237,7 +235,7 @@ RENDERERS.impots = () => {
   <!-- Taille -->
   <div class="sheet">
     <h3 class="sheet-title">Taille — impôt progressif (Art. V)</h3>
-    <p class="lead-in">Bénéfice de la période : Ventes ${septims(ventes)} − Achats ${septims(achats)} = <strong>${septims(benefice)}</strong></p>
+    <p class="lead-in">Bénéfice de la semaine : Ventes ${septims(ventes)} − Achats ${septims(achats)} = <strong>${septims(benefice)}</strong></p>
     <div class="table-wrap"><table class="ledger">
       <thead><tr><th>Tranche</th>${th('Part imposée','num')}${th('Taux','num')}${th('Impôt','num')}</tr></thead>
       <tbody>${trancheRows}</tbody>
@@ -275,7 +273,7 @@ RENDERERS.impots = () => {
         <tr class="subtotal"><td>Loyers</td><td class="num">${septims(loyerTotal())}</td></tr>
       </tbody>
       <tfoot>
-        <tr class="total"><td><strong>Total des impôts de la période</strong></td><td class="num"><strong>${septims(grandTotal)}</strong></td></tr>
+        <tr class="total"><td><strong>Total des impôts de la semaine</strong></td><td class="num"><strong>${septims(grandTotal)}</strong></td></tr>
       </tfoot>
     </table>
   </div>

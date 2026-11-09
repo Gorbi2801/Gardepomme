@@ -116,40 +116,21 @@ function currentWeekLabel() {
   return `Depuis le ${fmtDateShort(new Date(from + 'T12:00:00'))}`;
 }
 function isSunday() { return new Date().getDay() === 0; }
-// Début de la période courante — calculé depuis le champ `semaine` uniquement,
-// sans dépendance à la colonne date_fin.
-//
-// Règle :
-//   • Clôtures manuelles existent (format "YYYY-MM-DD_YYYY-MM-DD") :
-//       → lendemain de la 2e date de la paire la plus récente.
-//       → Ex : "2026-11-02_2026-11-15" → période depuis le 16/11.
-//   • Aucune clôture manuelle (uniquement des auto-clôtures "YYYY-Www") :
-//       → LUNDI de la dernière semaine auto-clôturée (l'utilisateur considère
-//         cette semaine comme toujours ouverte jusqu'à sa clôture manuelle).
-//       → Ex : dernière auto = "2026-W45" → période depuis le lundi 02/11.
+// Début de la période courante = lendemain de la dernière CLÔTURE MANUELLE.
+// Les clôtures manuelles ont le format "YYYY-MM-DD_YYYY-MM-DD" dans le champ semaine.
+// S'il n'y a aucune clôture manuelle, retourne null (affichage de tout).
 function periodeDebutCourante() {
   if (!DB.semaines?.length) return null;
-
-  // Priorité : clôtures manuelles
   const manuelles = DB.semaines.filter(s => s.semaine?.includes('_'));
-  if (manuelles.length) {
-    const lastFin = manuelles.reduce((max, s) => {
-      const fin = s.semaine.split('_')[1] || '';
-      return fin > max ? fin : max;
-    }, '');
-    if (!lastFin) return null;
-    const d = new Date(lastFin + 'T12:00:00');
-    d.setDate(d.getDate() + 1);
-    return toLocalDateStr(d);
-  }
-
-  // Fallback : lundi de la dernière auto-clôture
-  const autos = DB.semaines.filter(s => s.semaine?.includes('-W'));
-  if (!autos.length) return null;
-  const lastWk = autos.reduce((max, s) => s.semaine > max ? s.semaine : max, '');
-  if (!lastWk) return null;
-  const { monday } = isoWeekRange(lastWk);
-  return toLocalDateStr(monday);
+  if (!manuelles.length) return null;
+  const lastFin = manuelles.reduce((max, s) => {
+    const fin = s.semaine.split('_')[1] || '';
+    return fin > max ? fin : max;
+  }, '');
+  if (!lastFin) return null;
+  const d = new Date(lastFin + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return toLocalDateStr(d);
 }
 function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -172,12 +153,7 @@ function opsPeriode() {
 RENDERERS.finances = () => {
   const solde = soldeTresor();
 
-  // Les cartes du résumé affichent TOUJOURS la période courante (depuis la dernière clôture),
-  // indépendamment du filtre du registre (finPeriode).
-  const periodeFrom = periodeDebutCourante();
-  const opsP  = periodeFrom
-    ? DB.operations.filter(o => o.date_op >= periodeFrom)
-    : DB.operations;
+  const opsP  = opsPeriode();
   const rec7  = opsP.filter(o => o.sens === 'Recette').reduce((s, o) => s + num(o.montant), 0);
   const dep7  = opsP.filter(o => o.sens === 'Dépense').reduce((s, o) => s + num(o.montant), 0);
 
@@ -185,9 +161,9 @@ RENDERERS.finances = () => {
 
   return `${sectionHead('Trésor de la baronnie', 'Les recettes et dépenses. Vue par défaut : depuis la dernière clôture manuelle.')}
   <div class="summary-strip">
-    <div><span>Recettes (période)</span><strong class="in">${septims(rec7)}</strong></div>
-    <div><span>Dépenses (période)</span><strong class="out">${septims(dep7)}</strong></div>
-    <div><span>Résultat (période)</span><strong class="${rec7-dep7 >= 0 ? 'in' : 'out'}">${septimsSigned(rec7 - dep7)}</strong></div>
+    <div><span>Recettes</span><strong class="in">${septims(rec7)}</strong></div>
+    <div><span>Dépenses</span><strong class="out">${septims(dep7)}</strong></div>
+    <div><span>Résultat</span><strong class="${rec7-dep7 >= 0 ? 'in' : 'out'}">${septimsSigned(rec7 - dep7)}</strong></div>
   </div>
   <div class="tabs" role="tablist">
     ${tabs.map(([k, l]) => `<button role="tab" aria-selected="${k === finTab}" class="tab${k === finTab ? ' active' : ''}" onclick="finSetTab('${k}')">${esc(l)}</button>`).join('')}
