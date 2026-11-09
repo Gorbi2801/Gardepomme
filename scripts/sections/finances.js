@@ -116,11 +116,15 @@ function currentWeekLabel() {
   return `Depuis le ${fmtDateShort(new Date(from + 'T12:00:00'))}`;
 }
 function isSunday() { return new Date().getDay() === 0; }
-// Début de la période courante = lendemain de la dernière clôture manuelle.
-// Retourne null si aucune clôture n'existe encore (→ toutes les opérations sont "en cours").
+// Début de la période courante = lendemain de la dernière clôture MANUELLE.
+// Les clôtures manuelles utilisent le format "YYYY-MM-DD_YYYY-MM-DD" dans le champ semaine.
+// Les anciennes clôtures automatiques utilisaient "YYYY-Www" — elles sont ignorées ici.
+// Retourne null si aucune clôture manuelle n'existe (→ toutes les opérations sont "en cours").
 function periodeDebutCourante() {
   if (!DB.semaines?.length) return null;
-  const lastFin = DB.semaines.reduce((max, s) => s.date_fin > max ? s.date_fin : max, '');
+  const manuelles = DB.semaines.filter(s => s.semaine && s.semaine.includes('_'));
+  if (!manuelles.length) return null;
+  const lastFin = manuelles.reduce((max, s) => s.date_fin > max ? s.date_fin : max, '');
   if (!lastFin) return null;
   const d = new Date(lastFin + 'T12:00:00');
   d.setDate(d.getDate() + 1);

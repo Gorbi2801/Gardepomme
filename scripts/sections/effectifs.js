@@ -38,10 +38,13 @@ const GP_SALAIRES_KEY = 'gp_salaires_current';
 let _salairesCache = null;
 
 function getSalairesMap() {
+  // Cache-first : si le cache est déjà chargé, on ne relit pas localStorage
+  // (évite d'écraser le cache en mémoire si localStorage a échoué silencieusement)
+  if (_salairesCache !== null) return _salairesCache;
   try {
     _salairesCache = JSON.parse(localStorage.getItem(GP_SALAIRES_KEY) || '{}');
   } catch {
-    _salairesCache = _salairesCache || {};
+    _salairesCache = {};
   }
   return _salairesCache;
 }
