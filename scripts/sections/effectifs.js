@@ -207,6 +207,7 @@ function togglePaiement(id, paye) {
         toast(`${septims(num(m.salaire))} versés à ${fullName(m)} — inscrit au trésor.`);
         await reload();
       },
+      onCancel: () => renderActive(), // remet la case à l'état réel si l'utilisateur annule
     });
   } else {
     // ── Décocher : supprime l'opération correspondante ──
@@ -224,6 +225,7 @@ function togglePaiement(id, paye) {
         toast(`Paiement de ${fullName(m)} annulé.`);
         await reload();
       },
+      onCancel: () => renderActive(), // remet la case à l'état réel si l'utilisateur annule
     });
   }
 }
