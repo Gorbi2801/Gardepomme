@@ -116,31 +116,40 @@ function currentWeekLabel() {
   return `Depuis le ${fmtDateShort(new Date(from + 'T12:00:00'))}`;
 }
 function isSunday() { return new Date().getDay() === 0; }
-// Début de la période courante — calculé UNIQUEMENT depuis le champ `semaine`,
-// sans dépendance à la colonne date_fin (qui peut être absente ou nulle en DB).
-//   Clôture auto  "YYYY-Www"              → dimanche de cette semaine + 1 jour
-//   Clôture manu  "YYYY-MM-DD_YYYY-MM-DD" → 2e date de la paire      + 1 jour
-// On prend la date de fin la plus récente parmi toutes les entrées.
+// Début de la période courante — calculé depuis le champ `semaine` uniquement,
+// sans dépendance à la colonne date_fin.
+//
+// Règle :
+//   • Clôtures manuelles existent (format "YYYY-MM-DD_YYYY-MM-DD") :
+//       → lendemain de la 2e date de la paire la plus récente.
+//       → Ex : "2026-11-02_2026-11-15" → période depuis le 16/11.
+//   • Aucune clôture manuelle (uniquement des auto-clôtures "YYYY-Www") :
+//       → LUNDI de la dernière semaine auto-clôturée (l'utilisateur considère
+//         cette semaine comme toujours ouverte jusqu'à sa clôture manuelle).
+//       → Ex : dernière auto = "2026-W45" → période depuis le lundi 02/11.
 function periodeDebutCourante() {
   if (!DB.semaines?.length) return null;
-  let maxFin = '';
-  for (const s of DB.semaines) {
-    if (!s.semaine) continue;
-    let fin = '';
-    if (s.semaine.includes('_')) {
-      // Clôture manuelle : "YYYY-MM-DD_YYYY-MM-DD"
-      fin = s.semaine.split('_')[1] || '';
-    } else if (s.semaine.includes('-W')) {
-      // Clôture auto : "YYYY-Www" → dimanche de la semaine
-      const { sunday } = isoWeekRange(s.semaine);
-      fin = toLocalDateStr(sunday);
-    }
-    if (fin > maxFin) maxFin = fin;
+
+  // Priorité : clôtures manuelles
+  const manuelles = DB.semaines.filter(s => s.semaine?.includes('_'));
+  if (manuelles.length) {
+    const lastFin = manuelles.reduce((max, s) => {
+      const fin = s.semaine.split('_')[1] || '';
+      return fin > max ? fin : max;
+    }, '');
+    if (!lastFin) return null;
+    const d = new Date(lastFin + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    return toLocalDateStr(d);
   }
-  if (!maxFin) return null;
-  const d = new Date(maxFin + 'T12:00:00');
-  d.setDate(d.getDate() + 1);
-  return toLocalDateStr(d);
+
+  // Fallback : lundi de la dernière auto-clôture
+  const autos = DB.semaines.filter(s => s.semaine?.includes('-W'));
+  if (!autos.length) return null;
+  const lastWk = autos.reduce((max, s) => s.semaine > max ? s.semaine : max, '');
+  if (!lastWk) return null;
+  const { monday } = isoWeekRange(lastWk);
+  return toLocalDateStr(monday);
 }
 function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
